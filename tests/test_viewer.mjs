@@ -6,7 +6,7 @@ import { Dataset, decodeSteps } from '../viewer/js/data.js';
 import { categoryPalette, colorCategories, colorValues, colormap, generatedColor, geneColors, parseHex, quantile, sortedFinite, toHex } from '../viewer/js/colors.js';
 import { bounds, faceView, niceTicks, readsHighToLow, tickTarget, toXYZ, uprightAngle, validMask } from '../viewer/js/positions.js';
 import { groupState, treeRows } from '../viewer/js/hierarchy.js';
-import { colorLabel } from '../viewer/js/names.js';
+import { axisLabels, axisTitle, capitalize, colorLabel, endLabel, widgetEndLabel } from '../viewer/js/names.js';
 import { anglesToMatrix, clampDegrees, continuousAngles, dragDirection, faceRotation, knobTurn, openingTurnAxis, recentMovement, wrapTurns } from '../viewer/js/rotation.js';
 
 const tests = {
@@ -327,6 +327,27 @@ const tests = {
     // A --log-scaled source names its own scale
     assert.equal(colorLabel({ kind: 'gene', source: 'smoothed', name: 'Pcp4' }, sources), 'Pcp4 (smoothed, log2)');
     assert.equal(colorLabel({ kind: 'gene', source: 'measured', name: 'Pcp4' }, [{ name: 'measured', scale: 'log2' }]), 'Pcp4 (log2)');
+  },
+
+  'axis ends are named by their first letter, generic ends as they are, the widget names generic axes by their last word, and names are capitalized'() {
+    assert.equal(endLabel('anterior'), 'A');
+    assert.equal(endLabel('-x'), '-x');
+    assert.equal(capitalize('ventral'), 'Ventral');
+    // The widget labels an anatomical end by its letter, and a generic axis ('-UMAP 1', '+UMAP 1') at its high end only
+    assert.equal(widgetEndLabel('dorsal'), 'D');
+    assert.equal(widgetEndLabel('+UMAP 1'), '1');
+    assert.equal(widgetEndLabel('-UMAP 1'), '');
+    assert.equal(widgetEndLabel('+x'), 'x');
+  },
+
+  'axis names spell out both ends in the given order, or use the axis label for generic ends'() {
+    assert.equal(axisTitle('AP', ['anterior', 'posterior']), 'Anterior\u2013Posterior');
+    assert.equal(axisTitle('DV', ['ventral', 'dorsal']), 'Ventral\u2013Dorsal');
+    assert.equal(axisTitle('UMAP 1', ['-UMAP 1', '+UMAP 1']), 'UMAP 1');
+    // An embedding's own axis labels win over the dataset's (older manifests have none)
+    const manifest = { axes: { labels: ['AP', 'DV', 'LR'] } };
+    assert.deepEqual(axisLabels(manifest, { labels: ['UMAP 1', 'UMAP 2', 'UMAP 3'] }), ['UMAP 1', 'UMAP 2', 'UMAP 3']);
+    assert.deepEqual(axisLabels(manifest, {}), ['AP', 'DV', 'LR']);
   },
 };
 

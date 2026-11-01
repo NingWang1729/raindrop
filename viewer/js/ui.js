@@ -11,6 +11,15 @@ export function el(tag, props = {}, children = []) {
   return element;
 }
 
+// Create an SVG element with attributes (set as attributes, as SVG elements have few writable properties) and
+// children
+export function svg(tag, attributes = {}, children = []) {
+  const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
+  element.append(...children);
+  return element;
+}
+
 // A count with thousands separators, the same in every locale (e.g. 12,345)
 export function formatCount(n) {
   return n.toLocaleString('en-US');

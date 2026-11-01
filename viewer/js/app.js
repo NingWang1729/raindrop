@@ -5,11 +5,12 @@ import { PointCloudView, SharedCanvas } from './scene.js';
 import * as filters from './filters.js';
 import { bounds, faceView, toXYZ, validMask } from './positions.js';
 import { clampDegrees, faceRotation, openingTurnAxis } from './rotation.js';
+import { buildAxisLabels, buildAxisWidget, updateAxisLabels, updateAxisWidget, WIDGET_HALF_SIZE } from './axes.js';
 import { Categories } from './categories.js';
 import { Coloring } from './coloring.js';
 import { Legend } from './legend.js';
 import { FilterPanels } from './panels.js';
-import { el, formatCount } from './ui.js';
+import { el, formatCount, svg } from './ui.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
 // faint grey as context (filtered out), drawn in its color (shown)
@@ -129,17 +130,34 @@ class App {
     scene.setShownOpacity(settings.shownOpacity);
     scene.setContextOpacity(settings.contextOpacity);
     scene.setAxesVisible(settings.showAxes);
+    view.axisLabelsElement.hidden = !settings.showAxes;
+    // With a turn axis, the other axes of a 3D view are drawn as locked (2D views do not turn)
+    const turning = view.entry?.dims !== 2 && settings.turnAxis !== null;
+    view.widgetAxes.forEach(({ group }, axis) => {
+      group.classList.toggle('locked', turning && axis !== settings.turnAxis);
+    });
   }
 
-  // A view: its tile (an element over the shared canvas that takes its mouse input), its scene, and what it
-  // shows (embedding, colors), filled in by setEmbedding and setColor
+  // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels and
+  // the axis widget), its scene, and what it shows (embedding, colors), filled in by setEmbedding and setColor
   createView() {
-    const tile = el('div', { className: 'tile' });
+    const axisLabelsElement = el('div', { className: 'axis-labels' });
+    const half = WIDGET_HALF_SIZE;
+    const widgetElement = svg('svg', {
+      class: 'axis-widget', viewBox: `${-half} ${-half} ${2 * half} ${2 * half}`, 'aria-label': 'Orientation of the data axes',
+    });
+    const tile = el('div', { className: 'tile' }, [axisLabelsElement, widgetElement]);
     document.getElementById('tiles').append(tile);
 
-    const view = { tile, color: null, settings: this.group };
+    const view = { tile, axisLabelsElement, widgetElement, color: null, settings: this.group };
     view.scene = new PointCloudView(tile, this.canvas);
+    view.widgetAxes = buildAxisWidget(widgetElement);
     this.applySettings(view);
+    // The axis widget and labels follow every drawn frame (turns, zoom, pan, resize)
+    view.scene.onRender = () => {
+      updateAxisWidget(view);
+      updateAxisLabels(view, this.manifest);
+    };
     tile.addEventListener('pointerdown', () => this.select(view));
     this.views.push(view);
     return view;
@@ -183,6 +201,10 @@ class App {
     view.scene.setPositions(xyz, view.box, entry.dims === 2);
     view.scene.setUpAxis(entry.up);
     view.scene.setPointSize(view.settings.pointSize);
+    buildAxisLabels(view);
+    // A 2D embedding's widget shows its two axes only (SVG elements ignore `hidden`, so a class drops the third),
+    // none of them greyed by the turn axis
+    view.widgetAxes[2].group.classList.toggle('absent', entry.dims === 2);
     this.applySettings(view);
     // The reference side's view: 2D data keeps +y up whatever its manifest says
     const { axis, side } = this.referenceFace(entry);

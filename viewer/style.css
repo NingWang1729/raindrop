@@ -96,6 +96,8 @@ button:hover { border-color: var(--accent); }
 /* No text selection in tiles: a double or triple click selects text in them, and dragging a selection makes
    the browser cancel the pointer events that turn the data */
 .tile { position: relative; overflow: hidden; touch-action: none; user-select: none; }
+/* Tiles are size containers, so what they hold can scale with them (cqmin: 1% of the tile's smaller side) */
+.tile { container-type: size; }
 
 /* Legend: a panel right of the plots, so it never covers a view */
 #legend {
@@ -114,6 +116,34 @@ select.sort { width: auto; font-size: 11px; padding: 0 2px; color: var(--muted);
 .colorbar-labels { display: flex; justify-content: space-between; color: var(--muted); }
 
 #status { position: absolute; bottom: 10px; left: 10px; color: var(--muted); }
+
+/* Axes labels: tick values and axis names placed over the view by axes.updateAxisLabels */
+.axis-labels { position: absolute; inset: 0; pointer-events: none; }
+.axis-labels span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; }
+.axis-labels .tick { font-size: 11px; color: var(--muted); }
+.axis-labels .axis-title { font-size: 12px; font-weight: 600; transform-origin: center; }
+
+/* Axis widget: arrows in the colors of the axis; an axis drags do not turn about is grey and dashed */
+/* The widget is about a quarter of its tile's smaller side (56 to 130 px), so it crowds small tiles less */
+.axis-widget {
+  position: absolute;
+  left: clamp(4px, 2cqmin, 10px);
+  bottom: clamp(6px, 4cqmin, 30px);
+  width: clamp(56px, 25cqmin, 130px);
+  height: clamp(56px, 25cqmin, 130px);
+  pointer-events: none;
+}
+.axis-widget .shaft { stroke-width: 3; stroke-linecap: round; }
+.axis-widget text { font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
+.axis-widget [data-axis="0"] { --axis-color: #d9534f; }
+.axis-widget [data-axis="1"] { --axis-color: #3c9d4e; }
+.axis-widget [data-axis="2"] { --axis-color: #3b6fd6; }
+.axis-widget .axis .shaft { stroke: var(--axis-color); }
+.axis-widget .axis circle, .axis-widget .axis text { fill: var(--axis-color); }
+.axis-widget .axis.locked { --axis-color: #b0b0b0; }
+.axis-widget .axis.locked .shaft { stroke-dasharray: 4 4; }
+/* The third axis of a 2D embedding (SVG elements ignore the hidden attribute) */
+.axis-widget .axis.absent { display: none; }
 
 /* Narrow screens: stack the panel above the view */
 @media (max-width: 700px) {
