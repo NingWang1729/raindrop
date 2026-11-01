@@ -4,7 +4,11 @@ A dataset folder is static files that the viewer downloads on demand:
     manifest.json             names, types, categories, colors and file paths
     embeddings/<i>.bin        float32 positions, cells x dims (row major)
     fields/<i>.bin            one obs column: uint8/uint16 category codes or float32 values
-    genes/measured/<i>.bin    one gene of X: dense uint16 counts or float32 values, one value per cell
+    genes/<source>/<i>.bin    one gene: dense uint16 counts or float32 values, one value per cell; the source is
+                              'measured' (X) or extra<k> (--gene-source k, counted from 1); the viewer colors
+                              counts on a log scale, and a source marked --log-scaled (e.g. log2) linearly; a
+                              --one-byte source holds uint8 codes, value = code x the gene's step (codes 0-254;
+                              255 = no value, NaN or inf; the steps are in the manifest's 'steps')
 Files are numbered rather than named after columns or genes, so any name is safe in a URL.
 All arrays are little endian, as typed arrays in the browser expect.
 """
@@ -31,6 +35,11 @@ COLOR_SUFFIX = '_color'
 # Largest values the category code and count dtypes hold
 UINT8_MAX = np.iinfo(np.uint8).max
 UINT16_MAX = np.iinfo(np.uint16).max
+
+# One-byte gene values: codes 0 to ONE_BYTE_TOP in steps of each gene's top value / ONE_BYTE_TOP; the one code
+# left (255) marks a missing value
+ONE_BYTE_TOP = 254
+ONE_BYTE_MISSING = 255
 
 # An axis end with this name (in any case) is drawn upward on screen, as an alternative to --up
 UP_END = 'dorsal'
@@ -427,23 +436,111 @@ def build_hierarchies(adata, columns, hierarchies, hierarchy_csvs):
     return [hierarchy_entry(pairs, adata, columns) for _, pairs in sources]
 
 
-def write_genes(matrix, genes, name, folder, out_dir):
+def one_byte_step(column):
+    """Step of a gene's one-byte codes: its top value / ONE_BYTE_TOP (1 for a gene without positive values)."""
+    finite = column[np.isfinite(column)]
+    top = float(finite.max()) if finite.size else 0.0
+    return top / ONE_BYTE_TOP if top > 0 else 1.0
+
+
+def one_byte_codes(column, step):
+    """A gene's values as the nearest code (0 to ONE_BYTE_TOP) in steps of `step`, so the decoded value is off by at
+    most half a step; ONE_BYTE_MISSING where a value is not finite (NaN, or +inf: negative values are refused)."""
+    codes = np.full(len(column), ONE_BYTE_MISSING, dtype=np.uint8)
+    finite = np.isfinite(column)
+    # Values lie in [0, top], so the codes do too; the clip only guards against float rounding at the ends
+    codes[finite] = np.clip(np.round(column[finite] / step), 0, ONE_BYTE_TOP)
+    return codes
+
+
+def write_genes(matrix, genes, name, folder, out_dir, rows=None, n_cells=None, one_byte=False):
     """Write one dense file per gene of a cells x genes matrix and return the gene source's manifest entry.
 
     The entry's path has an {index} placeholder that the viewer fills with the gene's position in 'genes'.
+    With `rows` (each matrix row's cell position among `n_cells` cells), cells without a row get NaN, so the
+    values are float32. With `one_byte`, float32 values are written as one-byte codes with a step per gene, listed
+    in the entry's 'steps' (whole counts stay uint16, which holds them exactly).
     """
     # A CSC copy makes each gene's column a contiguous slice
     X = sparse.csc_matrix(matrix) if sparse.issparse(matrix) else np.asarray(matrix)
-    dtype = gene_dtype(X)
+    # A source that covers every cell keeps uint16 for whole counts; missing cells need NaN, hence float32. As
+    # gene_source_rows refused repeated and unknown cells, as many rows as cells means every cell is covered
+    dtype = gene_dtype(X) if rows is None or len(rows) == n_cells else 'float32'
+    if one_byte and dtype != 'float32':
+        warnings.warn(f'--one-byte {name} has no effect: its values are whole counts, stored exactly as {dtype}')
+    use_one_byte = one_byte and dtype == 'float32'
+    steps = []
     for i in range(len(genes)):
         column = X[:, i].toarray().ravel() if sparse.issparse(X) else X[:, i]
-        write_array(f'{out_dir}/genes/{folder}/{i}.bin', column, dtype)
-    return {'name': name, 'dtype': dtype, 'path': f'genes/{folder}/{{index}}.bin', 'genes': [str(g) for g in genes]}
+        # Spread the source's rows over all cells, NaN where the source has no row
+        if rows is not None:
+            values = np.full(n_cells, np.nan, dtype=np.float32)
+            values[rows] = column
+            column = values
+        if use_one_byte:
+            steps.append(one_byte_step(column))
+            write_array(f'{out_dir}/genes/{folder}/{i}.bin', one_byte_codes(column, steps[-1]), 'uint8')
+        else:
+            write_array(f'{out_dir}/genes/{folder}/{i}.bin', column, dtype)
+    entry = {'name': name, 'dtype': 'uint8' if use_one_byte else dtype, 'path': f'genes/{folder}/{{index}}.bin',
+             'genes': [str(g) for g in genes]}
+    if use_one_byte:
+        entry['steps'] = steps
+    return entry
+
+
+def check_gene_source_names(gene_sources):
+    """Raise if --gene-source names repeat or take the name of the measured genes of X."""
+    names = [name for name, _ in gene_sources]
+    taken = sorted({n for n in names if n == MEASURED or names.count(n) > 1})
+    if taken:
+        raise ValueError(f'--gene-source names must differ from each other and from {MEASURED!r} (the genes of X): '
+                         f'{taken}; rename them')
+
+
+def check_source_names(option, requested, gene_sources):
+    """Raise if an option (e.g. --log-scaled) names a gene source that does not exist."""
+    names = [MEASURED] + [name for name, _ in gene_sources]
+    unknown = sorted(set(requested) - set(names))
+    if unknown:
+        raise ValueError(f'{option} names {unknown}, which are not gene sources; use {names}')
+
+
+def check_one_byte_values(name, matrix):
+    """Raise if a --one-byte source has negative values, which its codes (0 up to each gene's top) cannot hold."""
+    if matrix.shape[1] == 0:
+        return
+    lowest = matrix.min() if sparse.issparse(matrix) else np.nanmin(matrix)
+    if lowest < 0:
+        raise ValueError(f'--one-byte {name}: values must not be negative (lowest {lowest:g}); leave this source '
+                         f'out of --one-byte')
+
+
+def gene_source_rows(cells, source_cells, path):
+    """Position among `cells` of each cell of an extra gene source; raises if a source cell is not in the data or
+    appears twice."""
+    if source_cells.has_duplicates:
+        raise ValueError(f'{path} has repeated cell names (obs_names); give each cell one row')
+    # get_indexer gives -1 for names not in `cells`
+    rows = cells.get_indexer(source_cells)
+    if (rows < 0).any():
+        raise ValueError(f'{int((rows < 0).sum())} cells of {path} are not in the converted file, e.g. '
+                         f'{list(source_cells[rows < 0][:3])}; match its obs_names to the main file\'s')
+    return rows
+
+
+def read_gene_sources(gene_sources, cells):
+    """Read each --gene-source (name, h5ad) and place its cells among `cells`: (name, AnnData, rows)."""
+    read = []
+    for name, path in gene_sources:
+        source = ad.read_h5ad(path)
+        read.append((name, source, gene_source_rows(cells, source.obs_names, path)))
+    return read
 
 
 def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=None,
             axis_labels=DEFAULT_AXIS_LABELS, up=None, exclude=(), ends=None, roles=None, view=None, locked=(),
-            hierarchies=(), hierarchy_csvs=()):
+            hierarchies=(), hierarchy_csvs=(), gene_sources=(), log_scaled=None, one_byte=()):
     """Write the dataset folder and return its manifest.
 
     `name` is shown in the viewer (default: the file name without extension); `color` and `filters` are the obs
@@ -455,9 +552,14 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
     end name of the side shown first (default: the low x end); `locked` lists two axis labels (drags then turn the
     data only about the third when the viewer opens) or none; `hierarchies` lists (parent, child) obs column pairs
     and `hierarchy_csvs` two-column CSV files that group a child column's values.
+    `gene_sources` lists (name, h5ad path) pairs of extra genes for the same cells (matched by obs_names; cells
+    missing from a file get NaN, which the viewer shows grey); `log_scaled` maps gene source names whose values are
+    already on a log scale to that scale's name (e.g. 'log2'), which the viewer then colors linearly and names in its
+    legend; `one_byte` lists gene sources whose fractional values are stored in one byte per cell (254 steps per
+    gene).
     Every request is checked before anything is written.
     """
-    up, ends, roles = up or {}, ends or {}, roles or {}
+    up, ends, roles, log_scaled = up or {}, ends or {}, roles or {}, log_scaled or {}
     name = name or os.path.splitext(os.path.basename(h5ad_path))[0]
 
     # Check the request against the data
@@ -473,8 +575,24 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
     check_locked(locked, axis_labels)
     check_out_dir(out_dir)
     hierarchy_entries = build_hierarchies(adata, columns, hierarchies, hierarchy_csvs)
+    check_gene_source_names(gene_sources)
+    extra_sources = read_gene_sources(gene_sources, adata.obs_names)
+    check_source_names('--log-scaled', log_scaled, gene_sources)
+    check_source_names('--one-byte', one_byte, gene_sources)
+    matrices = {MEASURED: adata.X, **{source_name: source.X for source_name, source, _ in extra_sources}}
+    for source_name in one_byte:
+        check_one_byte_values(source_name, matrices[source_name])
 
-    # Write the arrays, then the manifest that lists them
+    # Write the genes: X as 'measured', then each extra source in extra<k>/ (k from 1)
+    sources = [write_genes(adata.X, adata.var_names, MEASURED, MEASURED, out_dir, one_byte=MEASURED in one_byte)] + [
+        write_genes(source.X, source.var_names, source_name, f'extra{k}', out_dir, rows, adata.n_obs,
+                    source_name in one_byte)
+        for k, (source_name, source, rows) in enumerate(extra_sources, start=1)]
+    for source in sources:
+        if source['name'] in log_scaled:
+            source['scale'] = log_scaled[source['name']]
+
+    # Write the other arrays, then the manifest that lists them
     manifest = {
         'format_version': FORMAT_VERSION,
         'name': name,
@@ -485,7 +603,7 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
                      'filters': list(filters), 'view': view, 'locked': list(locked)},
         'embeddings': write_embeddings(adata, embeddings, up, ends, roles, axis_labels, out_dir),
         'fields': write_fields(adata, columns, out_dir),
-        'gene_sources': [write_genes(adata.X, adata.var_names, MEASURED, MEASURED, out_dir)],
+        'gene_sources': sources,
         'hierarchies': hierarchy_entries,
     }
     with open(f'{out_dir}/manifest.json', 'w') as f:
@@ -530,6 +648,19 @@ def main():
                         help='two-column CSV (parent, child) mapping each value of the child obs column to a group; '
                              'the parent need not be an obs column; repeatable')
     parser.add_argument('--exclude', nargs='*', default=[], help='obs columns to leave out')
+    # Extra genes, e.g. imputed ones, for the same cells; the viewer's gene source menu picks between them
+    parser.add_argument('--gene-source', nargs=2, action='append', default=[], metavar=('NAME', 'H5AD'),
+                        help='genes in X of another h5ad whose obs_names are cells of this one, shown as gene source '
+                             'NAME; cells it lacks get no value (grey in the viewer); repeatable')
+    parser.add_argument('--log-scaled', nargs=2, action='append', default=[], metavar=('SOURCE', 'SCALE'),
+                        help='gene source (measured, or a --gene-source NAME) whose values are already on a log '
+                             'scale, e.g. measured log2: the viewer colors them linearly and names SCALE in the '
+                             'legend; repeatable')
+    parser.add_argument('--one-byte', action='append', default=[], metavar='SOURCE',
+                        help='gene source (measured, or a --gene-source NAME) whose fractional values are stored in '
+                             'one byte per cell, 254 steps from 0 to each gene\'s top (a quarter of float32); values '
+                             'must not be negative; no effect on whole counts of a source that covers every cell; '
+                             'repeatable')
     args = parser.parse_args()
 
     up = {key: [float(x), float(y), float(z)] for key, x, y, z in args.up}
@@ -539,7 +670,9 @@ def main():
     manifest = convert(args.h5ad, args.out_dir, name=args.name, color=args.color, filters=args.filters,
                        embedding=args.embedding, axis_labels=args.axis_labels, up=up, exclude=args.exclude,
                        ends=ends, roles=roles, view=args.view, locked=args.locked,
-                       hierarchies=[tuple(pair) for pair in args.hierarchy], hierarchy_csvs=args.hierarchy_csv)
+                       hierarchies=[tuple(pair) for pair in args.hierarchy], hierarchy_csvs=args.hierarchy_csv,
+                       gene_sources=[tuple(pair) for pair in args.gene_source], log_scaled=dict(args.log_scaled),
+                       one_byte=args.one_byte)
     genes = ', '.join(f"{len(s['genes'])} {s['name']}" for s in manifest['gene_sources'])
     print(f"Wrote {args.out_dir}: {manifest['n_cells']:,} cells, {len(manifest['fields'])} obs columns, "
           f"genes: {genes}", flush=True)
