@@ -360,3 +360,155 @@ def test_command_line_anatomy(tmp_path):
     assert embeddings['X_ccf']['roles'] == ['AP', 'DV', 'LR'] and embeddings['X_ccf']['labels'] == ['AP', 'DV', 'LR']
     assert manifest['defaults']['view'] == 'left' and manifest['defaults']['locked'] == ['AP', 'LR']
     assert manifest['hierarchies'][0]['groups'] == ['X', 'Y', 'NA']
+
+
+def test_extra_gene_sources(tmp_path):
+    adata, _ = make_adata()
+    # Imputed genes for cells 3, 0 and 1 (in that order; cells 2 and 4 are missing), and counts for every cell
+    imputed = ad.AnnData(X=np.array([[0.5, 1], [1.5, 2], [2.5, 3]], dtype=np.float32),
+                         obs=pd.DataFrame(index=['cell3', 'cell0', 'cell1']), var=pd.DataFrame(index=['g1', 'g9']))
+    imputed.write_h5ad(tmp_path / 'imputed.h5ad')
+    counts = ad.AnnData(X=sparse.csr_matrix(np.arange(5, dtype=np.float32).reshape(5, 1)),
+                        obs=pd.DataFrame(index=adata.obs_names), var=pd.DataFrame(index=['g1']))
+    counts.write_h5ad(tmp_path / 'counts.h5ad')
+    out, manifest = run(tmp_path, adata, gene_sources=[('imputed', str(tmp_path / 'imputed.h5ad')),
+                                                       ('counts', str(tmp_path / 'counts.h5ad'))])
+
+    # X stays the first source; each extra one follows in order, with its own genes and a numbered folder
+    sources = manifest['gene_sources']
+    assert [s['name'] for s in sources] == ['measured', 'imputed', 'counts']
+    assert sources[1] == {'name': 'imputed', 'dtype': 'float32', 'path': 'genes/extra1/{index}.bin', 'genes': ['g1', 'g9']}
+
+    # Values land on their cells by name; cells missing from a source get NaN
+    g9 = np.fromfile(f'{out}/genes/extra1/1.bin', dtype='<f4')
+    np.testing.assert_array_equal(g9, [2, 3, np.nan, 1, np.nan])
+    # A source covering every cell keeps whole counts as uint16
+    assert sources[2]['dtype'] == 'uint16'
+    np.testing.assert_array_equal(np.fromfile(f'{out}/genes/extra2/0.bin', dtype='<u2'), [0, 1, 2, 3, 4])
+
+
+def test_extra_gene_source_errors(tmp_path):
+    adata, _ = make_adata()
+    stranger = ad.AnnData(X=np.ones((2, 1), dtype=np.float32), obs=pd.DataFrame(index=['cell0', 'other']))
+    stranger.write_h5ad(tmp_path / 'stranger.h5ad')
+    with pytest.raises(ValueError, match=r"1 cells of .*stranger.h5ad are not in the converted file, e.g. \['other'\]"):
+        run(tmp_path, adata, gene_sources=[('imputed', str(tmp_path / 'stranger.h5ad'))])
+    with pytest.warns(UserWarning, match='not unique'):
+        repeated = ad.AnnData(X=np.ones((2, 1), dtype=np.float32), obs=pd.DataFrame(index=['cell0', 'cell0']))
+    repeated.write_h5ad(tmp_path / 'repeated.h5ad')
+    with pytest.raises(ValueError, match='repeated cell names'):
+        run(tmp_path, adata, gene_sources=[('imputed', str(tmp_path / 'repeated.h5ad'))])
+    for names in (['measured'], ['imputed', 'imputed']):
+        with pytest.raises(ValueError, match='--gene-source names must differ'):
+            run(tmp_path, adata, gene_sources=[(n, str(tmp_path / 'stranger.h5ad')) for n in names])
+    # Nothing was written
+    assert not os.path.exists(tmp_path / 'out')
+
+
+def test_log_scaled_gene_sources(tmp_path):
+    adata, _ = make_adata()
+    imputed = ad.AnnData(X=np.ones((5, 1), dtype=np.float32), obs=pd.DataFrame(index=adata.obs_names),
+                         var=pd.DataFrame(index=['g1']))
+    imputed.write_h5ad(tmp_path / 'imputed.h5ad')
+
+    # A source marked as already log-scaled names its scale in the manifest; the others say nothing
+    out, manifest = run(tmp_path, adata, gene_sources=[('imputed', str(tmp_path / 'imputed.h5ad'))],
+                        log_scaled={'measured': 'log2'})
+    assert manifest['gene_sources'][0]['scale'] == 'log2'
+    assert 'scale' not in manifest['gene_sources'][1]
+
+    # Naming a source that does not exist stops before anything is written
+    (tmp_path / 'again').mkdir()
+    with pytest.raises(ValueError, match=r"--log-scaled names \['counts'\], which are not gene sources"):
+        run(tmp_path / 'again', adata, log_scaled={'counts': 'log2'})
+    assert not os.path.exists(tmp_path / 'again' / 'out')
+
+
+def test_one_byte_gene_values(tmp_path):
+    adata, _ = make_adata()
+    # Fractional values for cells 0, 1 and 3 (2 and 4 missing) in two genes, one of them all zero
+    log2 = ad.AnnData(X=np.array([[0.0, 0], [2.5, 0], [10.0, 0]], dtype=np.float32),
+                      obs=pd.DataFrame(index=['cell0', 'cell1', 'cell3']), var=pd.DataFrame(index=['g1', 'g2']))
+    log2.write_h5ad(tmp_path / 'log2.h5ad')
+    out, manifest = run(tmp_path, adata, gene_sources=[('log2', str(tmp_path / 'log2.h5ad'))], one_byte=['log2'])
+
+    # One byte per cell: each gene's values in 254 steps from 0 to its top, 255 for cells without a value
+    source = manifest['gene_sources'][1]
+    assert source['dtype'] == 'uint8'
+    assert source['steps'] == pytest.approx([10 / 254, 1])
+    codes = np.fromfile(f'{out}/genes/extra1/0.bin', dtype='u1')
+    np.testing.assert_array_equal(codes, [0, round(2.5 / (10 / 254)), 255, 254, 255])
+    np.testing.assert_array_equal(np.fromfile(f'{out}/genes/extra1/1.bin', dtype='u1'), [0, 0, 255, 0, 255])
+    # The other sources are untouched
+    assert 'steps' not in manifest['gene_sources'][0]
+
+
+def test_one_byte_errors_and_warnings(tmp_path):
+    adata, _ = make_adata()
+
+    # Whole counts already fit two bytes exactly: the option has no effect there
+    with pytest.warns(UserWarning, match="--one-byte measured has no effect"):
+        _, manifest = run(tmp_path, adata, one_byte=['measured'])
+    assert manifest['gene_sources'][0]['dtype'] == 'uint16'
+
+    # Negative values and unknown sources stop before anything is written
+    negative = ad.AnnData(X=np.array([[-1.5]] * 5, dtype=np.float32), obs=pd.DataFrame(index=adata.obs_names),
+                          var=pd.DataFrame(index=['g1']))
+    negative.write_h5ad(tmp_path / 'negative.h5ad')
+    for name, kwargs, message in [
+            ('neg', dict(gene_sources=[('scores', str(tmp_path / 'negative.h5ad'))], one_byte=['scores']),
+             '--one-byte scores: values must not be negative'),
+            ('unknown', dict(one_byte=['imputed']), r"--one-byte names \['imputed'\], which are not gene sources")]:
+        (tmp_path / name).mkdir()
+        with pytest.raises(ValueError, match=message):
+            run(tmp_path / name, adata, **kwargs)
+        assert not os.path.exists(tmp_path / name / 'out')
+
+
+def test_command_line_gene_sources(tmp_path):
+    """End to end: --gene-source, --log-scaled and --one-byte as a user types them."""
+    adata, _ = make_adata()
+    adata.write_h5ad(tmp_path / 'example.h5ad')
+    # log2 values for every cell but cell2
+    log2 = ad.AnnData(X=np.array([[0.0], [1.0], [2.0], [4.0]], dtype=np.float32),
+                      obs=pd.DataFrame(index=['cell0', 'cell1', 'cell3', 'cell4']), var=pd.DataFrame(index=['g1']))
+    log2.write_h5ad(tmp_path / 'log2.h5ad')
+    subprocess.run([sys.executable, CONVERT_PY, str(tmp_path / 'example.h5ad'), str(tmp_path / 'out'),
+                    '--gene-source', 'imputed', str(tmp_path / 'log2.h5ad'), '--log-scaled', 'imputed', 'log2',
+                    '--one-byte', 'imputed'], capture_output=True, text=True, check=True)
+    manifest = json.load(open(tmp_path / 'out' / 'manifest.json'))
+    imputed = manifest['gene_sources'][1]
+    assert imputed['name'] == 'imputed' and imputed['scale'] == 'log2' and imputed['dtype'] == 'uint8'
+    np.testing.assert_array_equal(np.fromfile(tmp_path / 'out' / 'genes' / 'extra1' / '0.bin', dtype='u1'),
+                                  [0, round(1 / (4 / 254)), 255, round(2 / (4 / 254)), 254])
+
+
+def test_gene_source_order_and_sparse_gaps(tmp_path):
+    adata, _ = make_adata()
+    # Every cell, in reverse order: values still land on their cells, and whole counts stay uint16
+    reverse = ad.AnnData(X=np.arange(5, dtype=np.float32).reshape(5, 1), obs=pd.DataFrame(index=adata.obs_names[::-1]),
+                         var=pd.DataFrame(index=['g1']))
+    reverse.write_h5ad(tmp_path / 'reverse.h5ad')
+    # A sparse source missing cells 1 and 3
+    gaps = ad.AnnData(X=sparse.csr_matrix(np.array([[1.0], [0.0], [3.0]], dtype=np.float32)),
+                      obs=pd.DataFrame(index=['cell0', 'cell2', 'cell4']), var=pd.DataFrame(index=['g1']))
+    gaps.write_h5ad(tmp_path / 'gaps.h5ad')
+    out, manifest = run(tmp_path, adata, gene_sources=[('reverse', str(tmp_path / 'reverse.h5ad')),
+                                                       ('gaps', str(tmp_path / 'gaps.h5ad'))])
+    assert manifest['gene_sources'][1]['dtype'] == 'uint16'
+    np.testing.assert_array_equal(np.fromfile(f'{out}/genes/extra1/0.bin', dtype='<u2'), [4, 3, 2, 1, 0])
+    assert manifest['gene_sources'][2]['dtype'] == 'float32'
+    np.testing.assert_array_equal(np.fromfile(f'{out}/genes/extra2/0.bin', dtype='<f4'), [1, np.nan, 0, np.nan, 3])
+
+
+def test_one_byte_measured_values_decode_within_half_a_step(tmp_path):
+    adata, _ = make_adata()
+    # Fractional X (e.g. log-normalized) as one byte: decoding code x step is within half a step of every value
+    values = np.array([[0.0, 0.3], [1.7, 0.0], [2.2, 5.0], [0.1, 1.1], [3.9, 2.6]], dtype=np.float32)
+    adata.X = values
+    out, manifest = run(tmp_path, adata, one_byte=['measured'])
+    source = manifest['gene_sources'][0]
+    assert source['dtype'] == 'uint8'
+    for i, step in enumerate(source['steps']):
+        decoded = np.fromfile(f'{out}/genes/measured/{i}.bin', dtype='u1') * step
+        assert np.all(np.abs(decoded - values[:, i]) <= step / 2 + 1e-6)

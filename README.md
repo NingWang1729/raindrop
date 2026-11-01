@@ -47,6 +47,19 @@ python convert.py data.h5ad data/my_dataset --name "My dataset" \
   column but which must cover every child value in the data. Each child value must have exactly one parent;
   values without one (missing values) go in an NA group. One hierarchy per column, two levels for now.
 - Colors come from scanpy-style `uns['<column>_colors']` or per-cell `obs['<column>_color']` columns.
+- `--gene-source NAME H5AD` adds the genes in `X` of another file as gene source NAME (repeatable), e.g. imputed
+  genes. Its cells are matched to the converted file's by `obs_names`; a cell it does not name gets no value (NaN,
+  drawn grey, the color of missing values), and a cell it names that the converted file lacks, or names twice,
+  raises a ValueError. Values are stored as given (the viewer colors genes by log(1 + value)).
+- `--log-scaled SOURCE SCALE` marks a gene source (`measured` for `X`, or a `--gene-source` name) whose values are
+  already on a log scale, e.g. `--log-scaled measured log2` for log-normalized data: the viewer then colors them
+  linearly instead of taking the log again, and legends name the scale (e.g. `Gene1 (log2)`). Repeatable.
+- `--one-byte SOURCE` stores a gene source's fractional values in one byte per cell instead of four (float32): each
+  gene's values are rounded to 254 steps from 0 to its top value (e.g. steps of 0.04 for log2 values up to 10),
+  which colors cannot tell apart, and the viewer decodes them on download. For large datasets on static hosts
+  (500 genes of 100,000 cells: 50 MB instead of 200 MB). Values must not be negative; whole counts of a source that
+  covers every cell are already stored exactly in two bytes, so the option has no effect on them (a source that misses
+  cells is stored as float32, so its counts are rounded to the steps too). Repeatable.
 - See `python convert.py --help` and the top of `convert.py` for the folder layout.
 
 The repository's `data/` folder is ignored by git; datasets can live there or anywhere else the server can reach.
