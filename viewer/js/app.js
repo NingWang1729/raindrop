@@ -8,6 +8,7 @@ import { clampDegrees, faceRotation, openingTurnAxis } from './rotation.js';
 import { buildAxisLabels, buildAxisWidget, updateAxisLabels, updateAxisWidget, WIDGET_HALF_SIZE } from './axes.js';
 import { Categories } from './categories.js';
 import { Coloring } from './coloring.js';
+import { EMBED_CONTROLS, showEmbedBar } from './embed.js';
 import { Legend } from './legend.js';
 import { FilterPanels } from './panels.js';
 import { Turning } from './turning.js';
@@ -318,11 +319,19 @@ class App {
   }
 }
 
-// Open the dataset named by ?data=, or say how to; errors are shown in the status line and rethrown for the
-// console
+// Read the URL parameters: stop on an unknown controls= value, show the embed bar for embed=1 (warn if controls= is
+// given without it), then open the dataset named by ?data=, or say how to; errors are shown in the status line and
+// rethrown for the console
 async function main() {
   const params = new URLSearchParams(window.location.search);
   const url = params.get('data');
+  const controlsMode = params.get('controls') ?? 'compact';
+  if (!EMBED_CONTROLS.includes(controlsMode)) {
+    document.getElementById('status').textContent = `Unknown controls=${controlsMode}: use controls=compact or controls=full.`;
+    return;
+  }
+  if (params.get('embed') === '1') showEmbedBar(controlsMode);
+  else if (params.has('controls')) console.warn('controls= has no effect without embed=1');
   if (!url) {
     document.getElementById('status').textContent = 'Add ?data=<dataset folder URL> to the address to open a dataset.';
     return;

@@ -52,6 +52,11 @@
   <main id="view">
     <!-- One tile per view, over a shared canvas (scene.js); each holds its axis labels, legend, widget and link button -->
     <div id="tiles"></div>
+    <!-- With ?embed=1 (a widget on another page) embed.js shows this bar; with compact controls it hides the side
+         panel and moves the cell count, color menu, gene box and reset button here -->
+    <div id="embed-bar" hidden></div>
+    <!-- Shown for a moment when a plain scroll over an embedded view scrolls the page instead of zooming -->
+    <div id="zoom-hint" hidden></div>
     <div id="status"></div>
   </main>
 
