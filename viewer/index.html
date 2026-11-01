@@ -18,6 +18,11 @@
     <section>
       <h2>View</h2>
       <select id="embedding" aria-label="Embedding"></select>
+      <table id="faces" aria-label="Show a side of the data"></table>
+      <label class="turn-about" id="turn-about-row">Turn about <select id="turn-about" aria-label="Axis drags turn about"></select></label>
+      <p class="hint" id="drag-hint">Shift+drag: spin or tilt only (the main direction)</p>
+      <table id="rotation" aria-label="Rotation: slider, angle and reset per axis"></table>
+      <button id="reset-rotation" title="Set every angle to 0 degrees">Reset rotation</button>
       <label class="slider">Show axes <input id="show-axes" type="checkbox" checked></label>
       <label class="slider">Point size <input id="point-size" type="range" min="-4" max="1" step="0.1" value="0" title="Point size (log scale)"></label>
       <label class="slider">Shown cells <input id="shown-opacity" type="range" min="0.05" max="1" step="0.01" value="1"></label>

@@ -10,6 +10,7 @@ import { Categories } from './categories.js';
 import { Coloring } from './coloring.js';
 import { Legend } from './legend.js';
 import { FilterPanels } from './panels.js';
+import { Turning } from './turning.js';
 import { el, formatCount, svg } from './ui.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
@@ -56,6 +57,16 @@ class App {
       addFilter: (name) => this.panels.addFilter(name),
       refresh: () => this.refresh(),
     });
+    // The side buttons, Turn about menu, rotation table and reset button of the selected view, and the angles shown
+    this.turning = new Turning({
+      manifest: this.manifest,
+      selectedView: () => this.selected,
+      selectedSettings: () => this.settings,
+      viewsWith: (settings) => this.viewsWith(settings),
+      applySettings: (view) => this.applySettings(view),
+      showFace: (view, axis, side) => this.showFace(view, axis, side),
+      referenceFace: (entry) => this.referenceFace(entry),
+    });
   }
 
   // Build the controls, then open one view on the dataset's default embedding, filters and color
@@ -88,8 +99,8 @@ class App {
     return this.views.filter((view) => view.settings === settings);
   }
 
-  // View: embedding, axes, point size and the opacity of shown and filtered-out cells. They belong to the selected
-  // view's settings, with the turn axis
+  // View: embedding, sides, rotation, axes, point size and the opacity of shown and filtered-out cells. Axes, point
+  // size, opacities and the turn axis belong to the selected view's settings
   buildViewControls() {
     // Settings shared by the views (filters, turn axis, point size, opacities, axes). Made here, from the
     // controls' starting values
@@ -107,6 +118,8 @@ class App {
     const select = document.getElementById('embedding');
     for (const e of this.manifest.embeddings) select.append(el('option', { value: e.name, textContent: `${e.name} (${e.dims}D)` }));
     select.addEventListener('change', () => this.setEmbedding(this.selected, select.value));
+
+    this.turning.buildRotationSliders();
 
     // Each control changes the selected view's settings, and so every view that shares them
     const control = (id, key, read) => {
@@ -153,6 +166,7 @@ class App {
     view.scene = new PointCloudView(tile, this.canvas);
     view.widgetAxes = buildAxisWidget(widgetElement);
     this.applySettings(view);
+    view.scene.onRotate = (degrees) => this.turning.viewTurned(view, degrees);
     // The axis widget and labels follow every drawn frame (turns, zoom, pan, resize)
     view.scene.onRender = () => {
       updateAxisWidget(view);
@@ -160,6 +174,8 @@ class App {
     };
     tile.addEventListener('pointerdown', () => this.select(view));
     this.views.push(view);
+    // The side panel's Turn about menu shows the selected view's turn axis, which a new view takes from its settings
+    this.turning.showTurnAxis();
     return view;
   }
 
@@ -171,12 +187,14 @@ class App {
 
   // Show the side at end `side` (-1 low, +1 high) of `axis`: the camera stays at the reference side (with
   // zoom and pan reset) and the data turns by that side's angles from the reference. faceRotation gives
-  // radians; the scene takes degrees, clamped to +-MAX_DEGREES (clampDegrees)
+  // radians; the scene takes degrees, clamped to +-MAX_DEGREES (clampDegrees); the selected view's sliders show the
+  // angles (showRotation clamps them too)
   showFace(view, axis, side) {
     const target = faceView(axis, side, view.entry.up, view.entry.roles);
     view.scene.viewFrom(view.reference.direction, view.reference.up);
     const degrees = faceRotation(target, view.reference).map((r) => r * 180 / Math.PI);
     view.scene.setRotation(degrees.map(clampDegrees));
+    if (view === this.selected) this.turning.showRotation(degrees);
   }
 
   // The side the camera looks from, where all angles are 0: the face named by --view if this embedding has
@@ -211,6 +229,7 @@ class App {
     view.reference = faceView(axis, side, entry.dims === 2 ? [0, 1, 0] : entry.up, entry.roles);
     if (view === this.selected) {
       document.getElementById('embedding').value = name;
+      this.turning.showViewControls(view);
     }
     this.showFace(view, axis, side);
     if (view.color) await this.coloring.setColor(view, view.color);
