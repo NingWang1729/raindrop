@@ -1,6 +1,7 @@
 // Turning the data from the side panel: a button per axis end that shows that side (#faces), the Turn about menu
 // (the axis drags turn about), the rotation table (per axis a slider, an angle box and a 0 button), the reset button
-// (Reset rotation; Reset view for 2D embeddings) and the hint on Shift-drags. All act on the selected view.
+// (Reset rotation; Reset view for 2D embeddings) and the hint on Shift-drags. All act on the selected view, and
+// the views linked to it follow (views.js).
 //
 // Angles here are degrees. Each one is the data's turn about one of its own axes (x, y, z of the embedding, wherever
 // they point now: the data's local frame), as scene.js keeps them: PointCloudView.rotationDegrees() reports them,
@@ -17,8 +18,9 @@ export class Turning {
   // manifest: the open dataset's manifest; selectedView(): the view the side panel's controls apply to;
   // selectedSettings(): its settings (turnAxis: index of the axis drags turn about, null for any);
   // viewsWith(settings): the views sharing a settings object; applySettings(view): show its settings in a view;
-  // showFace(view, axis, side): turn a view to show one side; referenceFace(entry): the side a view opens on
-  constructor({ manifest, selectedView, selectedSettings, viewsWith, applySettings, showFace, referenceFace }) {
+  // showFace(view, axis, side): turn a view to show one side; referenceFace(entry): the side a view opens on;
+  // linkedTo(view): the views that move with a view; syncFrom(view): move them to its camera and rotation
+  constructor({ manifest, selectedView, selectedSettings, viewsWith, applySettings, showFace, referenceFace, linkedTo, syncFrom }) {
     this.manifest = manifest;
     this.selectedView = selectedView;
     this.selectedSettings = selectedSettings;
@@ -26,6 +28,8 @@ export class Turning {
     this.applySettings = applySettings;
     this.showFace = showFace;
     this.referenceFace = referenceFace;
+    this.linkedTo = linkedTo;
+    this.syncFrom = syncFrom;
     // The angles the sliders and boxes show (degrees, clamped to +-MAX_DEGREES), set by showRotation
     this.rotation = [0, 0, 0];
   }
@@ -61,6 +65,7 @@ export class Turning {
         const scene = this.selectedView().scene;
         scene.turnAbout(axis, clampDegrees(degrees) - scene.rotationDegrees()[axis]);
         this.showRotation(scene.rotationDegrees());
+        this.syncFrom(this.selectedView());
       };
       slider.addEventListener('input', () => set(Number(slider.value)));
       number.addEventListener('change', () => set(Number(number.value)));
@@ -76,9 +81,10 @@ export class Turning {
     this.showTurnAxis();
   }
 
-  // Turn the selected view to the given angles (degrees)
+  // Turn the selected view (and the views linked to it) to the given angles (degrees)
   turnSelected(degrees) {
     this.selectedView().scene.setRotation(degrees);
+    this.syncFrom(this.selectedView());
   }
 
   // Set the axis drags turn about (null: any) in the selected view's settings (so in every view sharing them)
@@ -150,8 +156,9 @@ export class Turning {
     reset.title = view.entry.dims === 2 ? 'Back to the opening zoom and pan' : 'Set every angle to 0 degrees';
   }
 
-  // A drag turned a view: show its angles if it is the selected view
+  // A drag turned a view: show its angles if it is (or moves with) the selected view, and turn linked views
   viewTurned(view, degrees) {
-    if (view === this.selectedView()) this.showRotation(degrees);
+    this.syncFrom(view);
+    if (view === this.selectedView() || this.linkedTo(view).includes(this.selectedView())) this.showRotation(degrees);
   }
 }

@@ -1,6 +1,7 @@
 // Color by: the side panel's color menu (any obs column) and gene box (a gene source and a gene typed with
 // suggestions), and the per-cell colors of a view.
 import { colorCategories, colorValues, geneColors, quantile, sortedFinite } from './colors.js';
+import { colorLabel } from './names.js';
 import { el } from './ui.js';
 
 // Fraction of the values below the color scale's low end and above its high end: numbers span their middle
@@ -68,12 +69,14 @@ export class Coloring {
     }
   }
 
-  // Color a view by `color`: { kind: 'field', name } for an obs column, or { kind: 'gene', source, name }
+  // Color a view by `color`: { kind: 'field', name } for an obs column, or { kind: 'gene', source, name }; its
+  // tile's corner names it (shown with several views)
   async setColor(view, color) {
     view.color = color;
     this.setStatus(`Loading ${color.name}...`);
     const rgb = color.kind === 'gene' ? await this.geneColors(view, color) : await this.fieldColors(view, color);
     view.scene.setColors(rgb);
+    view.tileLegend.textContent = colorLabel(color, this.manifest.gene_sources);
     if (view === this.selectedView()) {
       this.showColorControls(view);
       this.renderLegend();

@@ -114,6 +114,18 @@ button:hover { border-color: var(--accent); }
 .tile { position: relative; overflow: hidden; touch-action: none; user-select: none; }
 /* Tiles are size containers, so what they hold can scale with them (cqmin: 1% of the tile's smaller side) */
 .tile { container-type: size; }
+/* With several views each tile is outlined, the selected one (the side panel's) in the accent color */
+#tiles.several .tile { outline: 1px solid var(--border); outline-offset: -1px; }
+#tiles.several .tile.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* With several views each tile names its colors in its corner (the full legend follows the selected view) */
+.tile-legend { position: absolute; top: 8px; left: 10px; font-weight: 600; pointer-events: none; }
+#tiles:not(.several) .tile-legend { display: none; }
+/* Link button in each tile's corner (with several views): faded when the view is unlinked */
+.tile button.link { position: absolute; top: 6px; right: 8px; padding: 2px 4px; line-height: 0; color: var(--accent); background: rgba(255, 255, 255, 0.85); }
+.tile button.link[aria-pressed=false] { color: var(--muted); opacity: 0.5; }
+#tiles:not(.several) .tile button.link { display: none; }
+.view-count { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.view-count select { width: auto; }
 
 /* Legend: a panel right of the plots, so it never covers a view */
 #legend {

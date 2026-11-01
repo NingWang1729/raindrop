@@ -17,6 +17,9 @@
 
     <section>
       <h2>View</h2>
+      <div class="view-count">
+        <label>Views <select id="view-count" aria-label="Number of views"></select></label>
+      </div>
       <select id="embedding" aria-label="Embedding"></select>
       <table id="faces" aria-label="Show a side of the data"></table>
       <label class="turn-about" id="turn-about-row">Turn about <select id="turn-about" aria-label="Axis drags turn about"></select></label>
@@ -47,7 +50,7 @@
   </aside>
 
   <main id="view">
-    <!-- One tile per view, over a shared canvas (scene.js) -->
+    <!-- One tile per view, over a shared canvas (scene.js); each holds its axis labels, legend, widget and link button -->
     <div id="tiles"></div>
     <div id="status"></div>
   </main>

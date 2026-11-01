@@ -12,6 +12,7 @@ import { Legend } from './legend.js';
 import { FilterPanels } from './panels.js';
 import { Turning } from './turning.js';
 import { el, formatCount, svg } from './ui.js';
+import { ViewGrid } from './views.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
 // faint grey as context (filtered out), drawn in its color (shown)
@@ -66,6 +67,23 @@ class App {
       applySettings: (view) => this.applySettings(view),
       showFace: (view, axis, side) => this.showFace(view, axis, side),
       referenceFace: (entry) => this.referenceFace(entry),
+      linkedTo: (view) => this.grid.linkedTo(view),
+      syncFrom: (view) => this.grid.syncFrom(view),
+    });
+    // The Views menu, the tiles' layout and linking (a view's camera, rotation and settings shared with others)
+    this.grid = new ViewGrid({
+      views: this.views,
+      selectedView: () => this.selected,
+      sharedSettings: () => this.group,
+      createView: () => this.createView(),
+      setEmbedding: (view, name) => this.setEmbedding(view, name),
+      setColor: (view, color) => this.coloring.setColor(view, color),
+      select: (view) => this.select(view),
+      applySettings: (view) => this.applySettings(view),
+      showSettings: () => this.showSettings(),
+      showRotation: (degrees) => this.turning.showRotation(degrees),
+      refresh: () => this.refresh(),
+      buildFilterPanel: (filter) => this.panels.buildFilterPanel(filter),
     });
   }
 
@@ -89,21 +107,22 @@ class App {
     await this.coloring.setColor(view, { kind: 'field', name: manifest.defaults.color ?? firstCategory?.name });
   }
 
-  // The selected view's settings (the shared settings before any view exists)
+  // The selected view's settings (the linked views' shared settings before any view exists)
   get settings() {
     return this.selected?.settings ?? this.group;
   }
 
-  // The views that use a settings object
+  // Views using a settings object: all linked views for the shared one, or one unlinked view
   viewsWith(settings) {
     return this.views.filter((view) => view.settings === settings);
   }
 
-  // View: embedding, sides, rotation, axes, point size and the opacity of shown and filtered-out cells. Axes, point
-  // size, opacities and the turn axis belong to the selected view's settings
+  // View: number of views, embedding, sides, rotation, axes, point size and the opacity of shown and filtered-out
+  // cells. Axes, point size, opacities and the turn axis belong to the selected view's settings
   buildViewControls() {
-    // Settings shared by the views (filters, turn axis, point size, opacities, axes). Made here, from the
-    // controls' starting values
+    this.grid.buildViewCount();
+    // Settings shared by linked views (filters, turn axis, point size, opacities, axes); an unlinked view has its
+    // own copy (views.js). Made here, from the controls' starting values
     this.group = {
       filters: [],
       // The axis drags turn about (index into the axes, null: any), from convert.py --locked
@@ -151,22 +170,39 @@ class App {
     });
   }
 
-  // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels and
-  // the axis widget), its scene, and what it shows (embedding, colors), filled in by setEmbedding and setColor
+  // The side panel shows the selected view's settings: display controls, turn axis and filter panels
+  showSettings() {
+    const { settings } = this;
+    document.getElementById('point-size').value = Math.log2(settings.pointSize);
+    document.getElementById('shown-opacity').value = settings.shownOpacity;
+    document.getElementById('context-opacity').value = settings.contextOpacity;
+    document.getElementById('show-axes').checked = settings.showAxes;
+    document.getElementById('filters').replaceChildren(...settings.filters.map((f) => f.panel));
+    this.turning.showTurnAxis();
+  }
+
+  // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels, a
+  // compact legend, the axis widget and the link button), its scene, and what it shows (embedding, colors), filled
+  // in by setEmbedding and setColor
   createView() {
     const axisLabelsElement = el('div', { className: 'axis-labels' });
+    const tileLegend = el('div', { className: 'tile-legend' });
     const half = WIDGET_HALF_SIZE;
     const widgetElement = svg('svg', {
       class: 'axis-widget', viewBox: `${-half} ${-half} ${2 * half} ${2 * half}`, 'aria-label': 'Orientation of the data axes',
     });
-    const tile = el('div', { className: 'tile' }, [axisLabelsElement, widgetElement]);
+    const tile = el('div', { className: 'tile' }, [axisLabelsElement, tileLegend, widgetElement]);
     document.getElementById('tiles').append(tile);
+    const linkButton = this.grid.buildLinkButton(tile);
 
-    const view = { tile, axisLabelsElement, widgetElement, color: null, settings: this.group };
+    const view = { tile, axisLabelsElement, tileLegend, widgetElement, linkButton, color: null, linked: true, settings: this.group };
+    linkButton.addEventListener('click', () => this.grid.toggleLink(view));
     view.scene = new PointCloudView(tile, this.canvas);
     view.widgetAxes = buildAxisWidget(widgetElement);
     this.applySettings(view);
     view.scene.onRotate = (degrees) => this.turning.viewTurned(view, degrees);
+    // Zoom and pan move the views linked to this one
+    view.scene.onCameraChange = () => this.grid.syncFrom(view);
     // The axis widget and labels follow every drawn frame (turns, zoom, pan, resize)
     view.scene.onRender = () => {
       updateAxisWidget(view);
@@ -174,27 +210,38 @@ class App {
     };
     tile.addEventListener('pointerdown', () => this.select(view));
     this.views.push(view);
+    this.grid.layoutViews();
     // The side panel's Turn about menu shows the selected view's turn axis, which a new view takes from its settings
     this.turning.showTurnAxis();
     return view;
   }
 
-  // Make a view the one the side panel's view and color controls apply to
+  // Make a view the one the side panel's view and color controls apply to: outline its tile and, once it has an
+  // embedding, show its embedding, controls, settings and angles in the side panel
   select(view) {
     if (this.selected === view) return;
     this.selected = view;
+    for (const v of this.views) v.tile.classList.toggle('selected', v === view);
+    if (!view.entry) return;
+    document.getElementById('embedding').value = view.entry.name;
+    this.turning.showViewControls(view);
+    this.coloring.showColorControls(view);
+    this.showSettings();
+    this.turning.showRotation(view.scene.rotationDegrees());
+    this.refresh();
   }
 
   // Show the side at end `side` (-1 low, +1 high) of `axis`: the camera stays at the reference side (with
   // zoom and pan reset) and the data turns by that side's angles from the reference. faceRotation gives
   // radians; the scene takes degrees, clamped to +-MAX_DEGREES (clampDegrees); the selected view's sliders show the
-  // angles (showRotation clamps them too)
+  // angles (showRotation clamps them too), and the views linked to it follow
   showFace(view, axis, side) {
     const target = faceView(axis, side, view.entry.up, view.entry.roles);
     view.scene.viewFrom(view.reference.direction, view.reference.up);
     const degrees = faceRotation(target, view.reference).map((r) => r * 180 / Math.PI);
     view.scene.setRotation(degrees.map(clampDegrees));
     if (view === this.selected) this.turning.showRotation(degrees);
+    this.grid.syncFrom(view);
   }
 
   // The side the camera looks from, where all angles are 0: the face named by --view if this embedding has
