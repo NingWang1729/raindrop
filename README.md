@@ -14,15 +14,38 @@ host can serve it, and any page can embed it.
 
 ```bash
 python convert.py data.h5ad data/my_dataset --name "My dataset" \
-    --color Subclass --filters Subclass section --axis-labels AP DV LR --up spatial 0 -1 0
+    --color Subclass --filters Subclass section region \
+    --axis-labels AP DV LR --ends X_ccf anterior posterior dorsal ventral left right --view left
 ```
 
 - Exports every `obs` column (numbers as ranges, everything else as categories), every 2D/3D `obsm`
   entry, and every gene in `X` (dense `uint16` if all values are whole counts up to 65535, else `float32`).
 - `--color` and `--filters` choose what the viewer shows when it opens, and `--embedding` the embedding
-  (default: `spatial` if present). `--axis-labels` names the three axes. `--up OBSM_KEY X Y Z` sets the direction
-  drawn upward for one embedding (default `0 1 0`), since coordinate frames differ (raw CCF has DV increasing
-  downward). `--exclude` leaves obs columns out.
+  (default: `spatial` if present). `--exclude` leaves obs columns out. `--axis-labels` names the three axes of
+  spatial embeddings; an `X_` embedding without `--ends` or `--roles` (UMAP, PCA, ...) names its axes after itself
+  (UMAP 1, PC 1, t-SNE 1, or e.g. piano_umap 1).
+- `--ends` names, per embedding, the low and high end of each axis; they label the side buttons, and an end named
+  `dorsal` is drawn upward. Mouse CCF runs anterior to posterior, dorsal to ventral and left to right, hence
+  `--ends X_ccf anterior posterior dorsal ventral left right`. `--view left` opens on the left side
+  (anterior to the left). Embeddings with no end named dorsal and no `--roles` can set the upward direction with
+  `--up OBSM_KEY X Y Z` instead (default `0 1 0`), since coordinate frames differ (raw CCF has DV increasing downward).
+- Axis roles say which data axis is which anatomical axis, whatever the axes' order. When every end of an
+  embedding has an anatomical name (anterior/posterior, dorsal/ventral, left/right, in any case), its roles follow
+  from them; `--roles OBSM_KEY X Y Z` gives them for an embedding whose end names are not anatomical. A role names
+  its axis's low end first: `AP` or `PA`, `DV` or `VD`, `LR` or `RL` (e.g. `--roles spatial LR PA VD` for x left to
+  right, y posterior to anterior, z ventral to dorsal). Each anatomical axis appears once, roles must agree with
+  anatomical end names, and an end name needs its partner (anterior with posterior, ...). With roles, dorsal is drawn
+  upward.
+- A mirror-image frame cannot show the left side with dorsal up and anterior to the left; prefer an unmirrored
+  embedding for anatomy. A frame is a mirror image when its axes, mapped to the anatomy, are left-handed compared
+  with CCF's (anterior to posterior, dorsal to ventral, left to right): an odd number of flipped axes plus swapped
+  axis pairs, e.g. CCF with only DV flipped, or CCF with AP and DV swapped.
+- `--locked` names two axis labels whose turns are locked when the viewer opens, so drags turn the data only about
+  the third (e.g. `--locked AP LR`); the default locks none.
+- `--hierarchy PARENT CHILD` groups a column's values by another obs column (e.g. `--hierarchy Class Subclass`);
+  `--hierarchy-csv FILE` does the same from a two-column CSV (parent, child), whose parent need not be an obs
+  column but which must cover every child value in the data. Each child value must have exactly one parent;
+  values without one (missing values) go in an NA group. One hierarchy per column, two levels for now.
 - Colors come from scanpy-style `uns['<column>_colors']` or per-cell `obs['<column>_color']` columns.
 - See `python convert.py --help` and the top of `convert.py` for the folder layout.
 
