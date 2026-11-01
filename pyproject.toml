@@ -1,0 +1,13 @@
+[project]
+name = "raindrop"
+version = "0.1.0"
+description = "Converter for the Raindrop single-cell and spatial data viewer"
+requires-python = ">=3.10"
+dependencies = ["anndata>=0.10", "numpy", "pandas", "scipy"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+# The converter is a single module; tests/ and data/ are not Python packages
+[tool.setuptools]
+py-modules = ["convert"]

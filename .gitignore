@@ -1,0 +1,5 @@
+# Converted datasets are large and rebuilt from h5ad files
+data/
+.venv/
+__pycache__/
+*.egg-info/
