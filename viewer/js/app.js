@@ -7,6 +7,8 @@ import { bounds, faceView, toXYZ, validMask } from './positions.js';
 import { clampDegrees, faceRotation, openingTurnAxis } from './rotation.js';
 import { Categories } from './categories.js';
 import { Coloring } from './coloring.js';
+import { Legend } from './legend.js';
+import { FilterPanels } from './panels.js';
 import { el, formatCount } from './ui.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
@@ -24,8 +26,8 @@ class App {
     // The views in the grid; the side panel's view and color controls apply to the selected one
     this.views = [];
     this.selected = null;
-    // Category colors, the same in every view
-    this.categories = new Categories();
+    // Category colors, the same in every view, and the rows of filter panels and the legend
+    this.categories = new Categories(this.manifest.hierarchies);
     // The color menu and gene box, and the colors of each view
     this.coloring = new Coloring({
       manifest: this.manifest,
@@ -33,20 +35,43 @@ class App {
       categories: this.categories,
       selectedView: () => this.selected,
       setStatus: (message) => this.setStatus(message),
+      renderLegend: () => this.legend.renderLegend(),
+    });
+    // The filter panels and the legend show the selected view's filters; changing one refreshes the views
+    this.panels = new FilterPanels({
+      manifest: this.manifest,
+      dataset,
+      categories: this.categories,
+      selectedFilters: () => this.settings.filters,
+      selectedView: () => this.selected,
+      refresh: () => this.refresh(),
+    });
+    this.legend = new Legend({
+      manifest: this.manifest,
+      dataset,
+      categories: this.categories,
+      selectedView: () => this.selected,
+      selectedFilters: () => this.settings.filters,
+      addFilter: (name) => this.panels.addFilter(name),
+      refresh: () => this.refresh(),
     });
   }
 
-  // Build the controls, then open one view on the dataset's default embedding and color
+  // Build the controls, then open one view on the dataset's default embedding, filters and color
   async init() {
     const { manifest } = this;
     document.title = `${manifest.name} - Raindrop`;
     document.getElementById('title').textContent = manifest.name;
     this.buildViewControls();
     this.coloring.buildColorControls();
+    this.legend.buildLegend();
+    this.panels.listenForAddFilter();
 
     const view = this.createView();
     this.select(view);
     await this.setEmbedding(view, manifest.defaults.embedding);
+    // Panels for convert.py --filters
+    for (const name of manifest.defaults.filters) await this.panels.addFilter(name);
     // Color by convert.py --color, else the first categorical column
     const firstCategory = manifest.fields.find((f) => f.kind === 'category');
     await this.coloring.setColor(view, { kind: 'field', name: manifest.defaults.color ?? firstCategory?.name });
@@ -62,8 +87,8 @@ class App {
     return this.views.filter((view) => view.settings === settings);
   }
 
-  // View: embedding, axes, point size and the opacity of shown cells. They belong to the selected view's
-  // settings, with the turn axis
+  // View: embedding, axes, point size and the opacity of shown and filtered-out cells. They belong to the selected
+  // view's settings, with the turn axis
   buildViewControls() {
     // Settings shared by the views (filters, turn axis, point size, opacities, axes). Made here, from the
     // controls' starting values
@@ -74,6 +99,7 @@ class App {
       // The point size slider is log2 of the size (0: the default size)
       pointSize: 2 ** Number(document.getElementById('point-size').value),
       shownOpacity: Number(document.getElementById('shown-opacity').value),
+      contextOpacity: Number(document.getElementById('context-opacity').value),
       showAxes: document.getElementById('show-axes').checked,
     };
 
@@ -91,6 +117,7 @@ class App {
     };
     control('point-size', 'pointSize', (input) => 2 ** Number(input.value));
     control('shown-opacity', 'shownOpacity', (input) => Number(input.value));
+    control('context-opacity', 'contextOpacity', (input) => Number(input.value));
     control('show-axes', 'showAxes', (input) => input.checked);
   }
 
@@ -100,6 +127,7 @@ class App {
     scene.turnAxis = settings.turnAxis;
     scene.setPointSize(settings.pointSize);
     scene.setShownOpacity(settings.shownOpacity);
+    scene.setContextOpacity(settings.contextOpacity);
     scene.setAxesVisible(settings.showAxes);
   }
 
@@ -168,7 +196,8 @@ class App {
   }
 
   // After any filter, embedding or view change: recompute which cells pass in each view (cells without a
-  // position differ between embeddings), then update the points, and the count of the selected view
+  // position differ between embeddings), then update the points, and the count, filter panels, add-filter menu
+  // and legend of the selected view
   refresh() {
     const ready = this.views.filter((view) => view.valid);
     if (!this.selected?.valid) return;
@@ -177,6 +206,9 @@ class App {
       this.updatePoints(view);
     }
     this.updateCount();
+    this.panels.updateFilterPanels();
+    this.panels.updateAddFilterOptions();
+    this.legend.renderLegend();
   }
 
   // Shown cells in color, filtered-out cells as context, cells without a position not at all

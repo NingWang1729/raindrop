@@ -1,4 +1,4 @@
-// Tests for the viewer's pure-logic modules (data, positions, colors, filters, hierarchy, rotation).
+// Tests for the viewer's pure-logic modules (data, positions, colors, filters, hierarchy, rotation, names).
 // Run with: node tests/test_viewer.mjs
 import assert from 'node:assert/strict';
 import * as filters from '../viewer/js/filters.js';
@@ -6,6 +6,7 @@ import { Dataset, decodeSteps } from '../viewer/js/data.js';
 import { categoryPalette, colorCategories, colorValues, colormap, generatedColor, geneColors, parseHex, quantile, sortedFinite, toHex } from '../viewer/js/colors.js';
 import { bounds, faceView, niceTicks, readsHighToLow, tickTarget, toXYZ, uprightAngle, validMask } from '../viewer/js/positions.js';
 import { groupState, treeRows } from '../viewer/js/hierarchy.js';
+import { colorLabel } from '../viewer/js/names.js';
 import { anglesToMatrix, clampDegrees, continuousAngles, dragDirection, faceRotation, knobTurn, openingTurnAxis, recentMovement, wrapTurns } from '../viewer/js/rotation.js';
 
 const tests = {
@@ -315,6 +316,17 @@ const tests = {
     const xyz = toXYZ(positions, 2, valid);
     assert.deepEqual([...xyz], [0, 0, 0, 4, 2, 0, 0, 0, 0]);
     assert.deepEqual(bounds(xyz, valid), { center: [2, 1, 0], extent: 4, lo: [0, 0, 0], hi: [4, 2, 0] });
+  },
+
+  'legends name a column by its name, and a gene with its scale and, outside the first source, its source'() {
+    const sources = [{ name: 'measured', genes: ['Pcp4'] }, { name: 'imputed', genes: ['Pcp4'] }, { name: 'smoothed', genes: ['Pcp4'], scale: 'log2' }];
+    assert.equal(colorLabel({ kind: 'field', name: 'region' }, sources), 'region');
+    // Counts (no scale in the manifest) are colored on the viewer's log scale
+    assert.equal(colorLabel({ kind: 'gene', source: 'measured', name: 'Pcp4' }, sources), 'Pcp4 (log scale)');
+    assert.equal(colorLabel({ kind: 'gene', source: 'imputed', name: 'Pcp4' }, sources), 'Pcp4 (imputed, log scale)');
+    // A --log-scaled source names its own scale
+    assert.equal(colorLabel({ kind: 'gene', source: 'smoothed', name: 'Pcp4' }, sources), 'Pcp4 (smoothed, log2)');
+    assert.equal(colorLabel({ kind: 'gene', source: 'measured', name: 'Pcp4' }, [{ name: 'measured', scale: 'log2' }]), 'Pcp4 (log2)');
   },
 };
 

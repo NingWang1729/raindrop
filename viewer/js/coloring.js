@@ -9,13 +9,15 @@ const OUTLIER_FRACTION = 0.01;
 
 export class Coloring {
   // manifest, dataset: the open dataset (data.js); categories: the shared palettes (categories.js);
-  // selectedView(): the view the side panel's controls apply to; setStatus(message): the status line
-  constructor({ manifest, dataset, categories, selectedView, setStatus }) {
+  // selectedView(): the view the side panel's controls apply to; setStatus(message): the status line;
+  // renderLegend(): redraw the legend of the selected view (legend.js)
+  constructor({ manifest, dataset, categories, selectedView, setStatus, renderLegend }) {
     this.manifest = manifest;
     this.dataset = dataset;
     this.categories = categories;
     this.selectedView = selectedView;
     this.setStatus = setStatus;
+    this.renderLegend = renderLegend;
   }
 
   // Color by: any obs column, or a gene typed into the gene box; applies to the selected view
@@ -74,6 +76,7 @@ export class Coloring {
     view.scene.setColors(rgb);
     if (view === this.selectedView()) {
       this.showColorControls(view);
+      this.renderLegend();
     }
     this.setStatus('');
   }

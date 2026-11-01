@@ -3,6 +3,7 @@
   --muted: #6a737d;
   --border: #d8dee4;
   --panel: #f6f8fa;
+  --accent: #2f6fdf;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 13px;
   color: var(--text);
@@ -41,12 +42,50 @@ select, input[type=search], input[type=number], #gene {
   font: inherit;
 }
 
+button {
+  font: inherit;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+
 .slider { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
 .slider input { width: 55%; }
 .slider input[type=checkbox] { width: auto; }
 .gene-box { display: flex; gap: 4px; margin-top: 4px; }
 /* [hidden] must win over display: flex (datasets without genes hide the box) */
 .gene-box[hidden] { display: none; }
+
+/* Filter panels */
+.filter {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+  margin-bottom: 8px;
+}
+/* The title takes its own line (hierarchy titles such as 'Class › Subclass' are long); controls go below */
+.filter-header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
+.filter-header strong { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-header .summary { flex: 1; color: var(--muted); }
+.filter .rows { max-height: 220px; overflow-y: auto; margin-top: 4px; }
+.range { display: flex; gap: 4px; }
+
+/* Rows shared by filter lists and the legend */
+.row { display: flex; align-items: center; gap: 6px; padding: 1px 2px; cursor: pointer; }
+.row:hover { background: var(--panel); }
+.row.empty { color: var(--muted); }
+.row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* Hierarchies: group rows with an open/close button, children indented under them */
+.row.group .name { font-weight: 600; }
+.row.child { padding-left: 22px; }
+.expander { border: none; background: none; padding: 0; width: 14px; color: var(--muted); }
 
 /* The point cloud fills the main area; the status line floats over it */
 #view { flex: 1; position: relative; overflow: hidden; }
@@ -58,10 +97,27 @@ select, input[type=search], input[type=number], #gene {
    the browser cancel the pointer events that turn the data */
 .tile { position: relative; overflow: hidden; touch-action: none; user-select: none; }
 
+/* Legend: a panel right of the plots, so it never covers a view */
+#legend {
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 12px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+}
+.legend-title { display: flex; gap: 6px; align-items: center; font-weight: 600; margin-bottom: 4px; }
+.legend-title span { flex: 1; }
+.legend-title button.clear { font-size: 11px; padding: 0 6px; font-weight: normal; }
+select.sort { width: auto; font-size: 11px; padding: 0 2px; color: var(--muted); }
+.colorbar { height: 12px; border-radius: 3px; }
+.colorbar-labels { display: flex; justify-content: space-between; color: var(--muted); }
+
 #status { position: absolute; bottom: 10px; left: 10px; color: var(--muted); }
 
 /* Narrow screens: stack the panel above the view */
 @media (max-width: 700px) {
   body { flex-direction: column; }
   #sidebar { width: 100%; max-height: 45vh; border-right: none; border-bottom: 1px solid var(--border); }
+  #legend { width: 100%; max-height: 30vh; border-left: none; border-top: 1px solid var(--border); }
 }
