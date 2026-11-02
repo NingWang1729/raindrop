@@ -60,6 +60,9 @@ button:hover { border-color: var(--accent); }
 .slider { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
 .slider input { width: 55%; }
 .slider input[type=checkbox] { width: auto; }
+/* A slider's readout, at a fixed width so the widest value ('15.5 px', '100%') cannot widen the side panel */
+.slider output { width: 4.2em; flex-shrink: 0; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.slider input[type=range] { width: 45%; }
 /* Turn about menu above the rotation table; [hidden] must win over display: flex (2D views hide it) */
 .turn-about { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
 .turn-about[hidden] { display: none; }

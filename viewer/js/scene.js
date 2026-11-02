@@ -1,9 +1,9 @@
 // WebGL point cloud: one point per cell, drawn by three.js.
 //
-// Each cell has a state: 0 = not drawn (no position), 1 = context (filtered out, drawn faint grey),
-// 2 = shown (passes the filters, drawn in its color). Two Points objects share one geometry:
-// the first draws shown cells opaque, the second draws context cells transparent on top,
-// without writing depth, so faint context never hides shown cells.
+// Each cell has a state: 0 = not drawn (no position), 1 = context (filtered out, drawn grey at its own opacity),
+// 2 = shown (passes the filters, drawn in its color). Two Points objects share one geometry, each drawn opaque
+// with depth writes at 100% (points of a pixel or more), else transparent without depth writes (updateBlending):
+// the first draws shown cells, the second context cells after them, so translucent context never hides shown cells.
 //
 // Frames: data (the embedding's axes, data units); world = the data turned about its center by the data's
 // rotation (`model`); camera (three.js: x right, y up, looking down -z); screen = the tile in CSS px, x right
@@ -20,6 +20,7 @@
 // view draws only into the rectangle of its tile, an element over the canvas that also takes its mouse input.
 import * as THREE from 'three';
 import { TrackballControls } from '../vendor/TrackballControls.js';
+import { EXTENT_PER_UNIT_POINT_SIZE, framedDiameterPx } from './positions.js';
 import { dragDirection, knobTurn, recentMovement, wrapTurns } from './rotation.js';
 
 // White page behind the points
@@ -38,8 +39,6 @@ const SHOWN_STATE = 2;
 const CONTEXT_OPACITY = 0.08;
 // Mid grey (each channel 128 of 255) for cells until setColors gives their colors
 const UNSET_COLOR = 128;
-// Point size 1 is a point this many times smaller (in diameter) than the data's largest side
-const EXTENT_PER_UNIT_POINT_SIZE = 200;
 // addTurns: a turn whose sin(angle / 2) is below this is no turn (its axis is undefined)
 const MIN_TURN_SINE = 1e-12;
 // 2D wheel zoom: the camera distance is scaled by exp(deltaY * this), assuming deltaY is in px of scrolling
@@ -162,7 +161,8 @@ export class PointCloudView {
     });
 
     // The two Points objects share the geometry and the size uniforms (the same objects, so one write
-    // updates both). Context is drawn after shown (renderOrder 1), blending over it
+    // updates both). Context is drawn after shown (renderOrder 1): blending over it while translucent, depth-tested
+    // against it like any opaque object at 100% (three.js draws opaque objects before transparent ones)
     this.geometry = new THREE.BufferGeometry();
     this.uniforms = { uSize: { value: 1 }, uScale: { value: 1 } };
     this.shown = this.makePoints(SHOWN_STATE, 1, false);
@@ -182,10 +182,12 @@ export class PointCloudView {
     this.points.add(this.axesBox);
 
     // Callbacks set by the page: onRotate(degrees) after a drag turned the data; onRender after every drawn
-    // frame (e.g. to redraw the axis widget); onCameraChange when zoom or pan moved the camera
+    // frame (e.g. to redraw the axis widget); onCameraChange when zoom or pan moved the camera; onResize after the
+    // tile's size, and so the framed point size, changed
     this.onRotate = () => {};
     this.onRender = () => {};
     this.onCameraChange = () => {};
+    this.onResize = () => {};
     // The data's turns (radians) about its own x, y and z axes, as the sliders show them: every turn adds its
     // parts about each axis of the data as it points then (see addTurns), so they depend on the order of turns;
     // and the data axis that drags turn about (null: any, as a turntable; see turnByDrag)
@@ -200,8 +202,8 @@ export class PointCloudView {
     new ResizeObserver(() => this.resize()).observe(container);
   }
 
-  // A Points object drawing the cells in `drawState`. Context points are transparent and do not write depth,
-  // so they blend over shown points without hiding any; shown points start opaque (see updateShownBlending).
+  // A Points object drawing the cells in `drawState`. Context points start transparent and do not write depth,
+  // so they blend over shown points without hiding any; shown points start opaque (see updateBlending).
   // Culling is off: three.js would cull by the geometry's bounding sphere, which it computes once and does not
   // recompute when setPositions replaces the positions
   makePoints(drawState, opacity, isContext) {
@@ -572,26 +574,34 @@ export class PointCloudView {
   }
 
   // Opacity of shown cells: opaque ones hide what lies behind them (depth written); fainter ones blend, so
-  // dense regions look darker, and no longer hide other points
+  // dense regions look darker, and no longer hide other points; at 0 they are not drawn at all
   setShownOpacity(opacity) {
     this.shown.material.uniforms.uOpacity.value = opacity;
+    this.shown.visible = opacity > 0;
     this.render();
   }
 
-  // Shown points blend (without depth writes) when translucent or smaller than a pixel at the target's distance
-  // (the shader fades those by their area, which only shows when blending); otherwise they are opaque. Checked
-  // before each drawn frame, as zooming changes their size on screen; the material is recompiled only when
-  // this switches
-  updateShownBlending() {
-    const { material } = this.shown;
+  // A Points object's points blend (without depth writes) when translucent or smaller than a pixel at the target's
+  // distance (the shader fades those by their area, which only shows when blending); otherwise they are opaque.
+  // Shown and context points follow the same rule, so filtered-out cells at 100% hide what is behind them. Checked
+  // before each drawn frame, as zooming changes their size on screen; the material is recompiled only when this
+  // switches
+  updateBlending(points) {
+    const { material } = points;
     const distance = this.camera.position.distanceTo(this.controls.target);
     // Point diameter in device px at the target's distance, as in VERTEX_SHADER
-    const pixels = this.uniforms.uSize.value * this.uniforms.uScale.value / distance;
+    const pixels = material.uniforms.uSize.value * this.uniforms.uScale.value / distance;
     const blend = material.uniforms.uOpacity.value < 1 || pixels < 1;
     if (material.transparent === blend) return;
     material.transparent = blend;
     material.depthWrite = !blend;
     material.needsUpdate = true;
+  }
+
+  // Diameter in CSS px of a point of relative size `size` when the view is framed (positions.framedDiameterPx), for
+  // the size readouts
+  framedDiameter(size) {
+    return framedDiameterPx(size, this.extent, this.fit, this.container.clientHeight, this.camera.fov);
   }
 
   // Opacity of context cells; at 0 they are not drawn at all
@@ -630,6 +640,7 @@ export class PointCloudView {
     const pixelHeight = height * this.renderer.getPixelRatio();
     this.uniforms.uScale.value = pixelHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)));
     this.render();
+    this.onResize();
   }
 
   // Camera distance at which the data's bounding sphere fits the tile, times FRAME_MARGIN for the axes labels: the
@@ -701,7 +712,8 @@ export class PointCloudView {
     const bottom = host.height - (tile.top - host.top) - height;
     this.renderer.setViewport(left, bottom, width, height);
     this.renderer.setScissor(left, bottom, width, height);
-    this.updateShownBlending();
+    this.updateBlending(this.shown);
+    this.updateBlending(this.context);
     this.renderer.render(this.scene, this.camera);
     this.onRender();
   }

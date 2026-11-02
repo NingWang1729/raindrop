@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import * as filters from '../viewer/js/filters.js';
 import { Dataset, decodeSteps } from '../viewer/js/data.js';
 import { categoryPalette, colorCategories, colorValues, colormap, generatedColor, geneColors, parseHex, quantile, sortedFinite, toHex } from '../viewer/js/colors.js';
-import { bounds, faceView, niceTicks, readsHighToLow, tickTarget, toXYZ, uprightAngle, validMask } from '../viewer/js/positions.js';
+import { bounds, faceView, framedDiameterPx, niceTicks, readsHighToLow, tickTarget, toXYZ, uprightAngle, validMask } from '../viewer/js/positions.js';
 import { groupState, treeRows } from '../viewer/js/hierarchy.js';
 import { axisLabels, axisTitle, capitalize, colorLabel, endLabel, widgetEndLabel } from '../viewer/js/names.js';
 import { anglesToMatrix, clampDegrees, continuousAngles, dragDirection, faceRotation, knobTurn, openingTurnAxis, recentMovement, wrapTurns } from '../viewer/js/rotation.js';
@@ -307,6 +307,18 @@ const tests = {
       assert.ok(Math.abs(uprightAngle(dx, dy) - angle) < 1e-9, `${dx}, ${dy}: ${uprightAngle(dx, dy)}`);
       assert.equal(readsHighToLow(dx, dy), reversed, `${dx}, ${dy}`);
     }
+  },
+
+  'point size readout: the diameter in CSS px at the framed distance, doubling with the size'() {
+    // diameter = size * extent / 200 (data units) * tileCssHeight / (2 tan(fov / 2)) (CSS px per data unit at
+    // distance 1) / fitDistance. With a 90 degree field of view tan(45) = 1: 1 * 200 / 200 * 800 / 2 / 100 = 4 px
+    assert.ok(Math.abs(framedDiameterPx(1, 200, 100, 800, 90) - 4) < 1e-9);
+    assert.ok(Math.abs(framedDiameterPx(2, 200, 100, 800, 90) - 8) < 1e-9);
+    assert.ok(Math.abs(framedDiameterPx(8, 200, 100, 800, 90) - 32) < 1e-9);
+    // Another case: 0.5 * 10 / 200 * 600 / (2 tan(30)) / 20 = 0.6495 px; half as tall a tile gives half the size
+    const expected = (0.5 * 10 / 200) * (600 / (2 * Math.tan(Math.PI / 6))) / 20;
+    assert.ok(Math.abs(framedDiameterPx(0.5, 10, 20, 600, 60) - expected) < 1e-9);
+    assert.ok(Math.abs(framedDiameterPx(0.5, 10, 20, 300, 60) - expected / 2) < 1e-9);
   },
 
   'cells without a position are masked, kept off the GPU and out of the bounds'() {

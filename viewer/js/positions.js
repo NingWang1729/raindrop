@@ -100,6 +100,18 @@ export function faceView(axis, side, up, roles = null) {
   return { direction, up: topViewUp(upAxis, roles) };
 }
 
+// Point size 1 is a point this many times smaller (in diameter) than the data's largest side
+export const EXTENT_PER_UNIT_POINT_SIZE = 200;
+
+// Diameter in CSS px of a point of relative size `size` (2^slider) at the data's center when the view is framed:
+// size * extent / EXTENT_PER_UNIT_POINT_SIZE data units, at the framing distance fitDistance, where the tile's height
+// (tileCssHeight CSS px) shows 2 tan(fov / 2) world units per unit of distance. The size readouts show it; it does not
+// follow zoom, as it names the framed size
+export function framedDiameterPx(size, extent, fitDistance, tileCssHeight, fovDegrees) {
+  const pxPerUnitAtDistance1 = tileCssHeight / (2 * Math.tan(fovDegrees * Math.PI / 360));
+  return size * extent / EXTENT_PER_UNIT_POINT_SIZE * pxPerUnitAtDistance1 / fitDistance;
+}
+
 // Direction of an edge in degrees, in [-180, 180]: the screen angle from the +x axis toward the edge, which
 // goes from its low end to its high end by (dx, dy) in screen px, x right and y down. With y down,
 // atan2(dy, dx) grows clockwise on screen

@@ -16,10 +16,15 @@ import { el, formatCount, svg } from './ui.js';
 import { ViewGrid } from './views.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
-// faint grey as context (filtered out), drawn in its color (shown)
+// grey as context (filtered out), drawn in its color (shown)
 const NO_POSITION_STATE = 0;
 const CONTEXT_STATE = 1;
 const SHOWN_STATE = 2;
+
+// An opacity (a fraction) as the readouts show it, in whole percent
+function percent(fraction) {
+  return `${Math.round(fraction * 100)}%`;
+}
 
 class App {
   constructor(dataset) {
@@ -147,6 +152,7 @@ class App {
       input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
         this.settings[key] = read(input);
         for (const view of this.viewsWith(this.settings)) this.applySettings(view);
+        this.showReadouts();
       });
     };
     control('point-size', 'pointSize', (input) => 2 ** Number(input.value));
@@ -179,7 +185,19 @@ class App {
     document.getElementById('context-opacity').value = settings.contextOpacity;
     document.getElementById('show-axes').checked = settings.showAxes;
     document.getElementById('filters').replaceChildren(...settings.filters.map((f) => f.panel));
+    this.showReadouts();
     this.turning.showTurnAxis();
+  }
+
+  // The side panel's readouts of the selected view's settings: Point size as the point's diameter in CSS px when the
+  // view is framed (empty until its embedding has framed it), the opacities in percent
+  showReadouts() {
+    const { settings } = this;
+    const scene = this.selected?.scene;
+    const output = (id) => document.querySelector(`output[for="${id}"]`);
+    output('point-size').textContent = scene?.fit ? `${scene.framedDiameter(settings.pointSize).toFixed(1)} px` : '';
+    output('shown-opacity').textContent = percent(settings.shownOpacity);
+    output('context-opacity').textContent = percent(settings.contextOpacity);
   }
 
   // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels, a
@@ -204,6 +222,10 @@ class App {
     view.scene.onRotate = (degrees) => this.turning.viewTurned(view, degrees);
     // Zoom and pan move the views linked to this one
     view.scene.onCameraChange = () => this.grid.syncFrom(view);
+    // The framed point size follows the tile's size
+    view.scene.onResize = () => {
+      if (view === this.selected) this.showReadouts();
+    };
     // The axis widget and labels follow every drawn frame (turns, zoom, pan, resize)
     view.scene.onRender = () => {
       updateAxisWidget(view);
@@ -280,6 +302,8 @@ class App {
       this.turning.showViewControls(view);
     }
     this.showFace(view, axis, side);
+    // The framed point size depends on the embedding's extent and framing
+    if (view === this.selected) this.showReadouts();
     if (view.color) await this.coloring.setColor(view, view.color);
     this.refresh();
   }
