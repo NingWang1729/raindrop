@@ -44,7 +44,7 @@
             <th>Filtered out</th>
             <td><input id="context-point-size" type="range" min="-4" max="3" step="0.1" value="0" title="Point size of filtered-out cells (log scale). Points smaller than a pixel are drawn a pixel wide and fainter, by the share of the pixel they cover"></td>
             <td><output for="context-point-size" title="Diameter when the whole view is in frame, in CSS px"></output></td>
-            <td><input id="context-opacity" type="range" min="0" max="1" step="0.01" value="0.08" title="Opacity of filtered-out cells. Below 100% they blend over shown cells behind them. Opaque shown cells hide them"></td>
+            <td><input id="context-opacity" type="range" min="0" max="1" step="0.01" value="0.08" title="Opacity of filtered-out cells. Below 100% they blend over shown cells behind them. Opaque shown cells hide them, and stay on top at equal depth while their points are at least a pixel wide"></td>
             <td><output for="context-opacity"></output></td>
           </tr>
         </tbody>

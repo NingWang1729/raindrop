@@ -223,6 +223,11 @@ export class PointCloudView {
       fragmentShader: FRAGMENT_SHADER,
       transparent: isContext,
       depthWrite: !isContext,
+      // Context cells pass the depth test only when strictly nearer, so shown cells stay on top at equal depth: in 2D
+      // every cell lies at z = 0, in 3D sectioned data seen along its section axis puts a section at one depth, and
+      // anywhere points whose depths fall in one step of the depth buffer tie. This holds while shown cells write
+      // depth (opaque, points of a pixel or more)
+      depthFunc: isContext ? THREE.LessDepth : THREE.LessEqualDepth,
     });
     const points = new THREE.Points(this.geometry, material);
     points.frustumCulled = false;
