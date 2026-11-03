@@ -16,7 +16,7 @@ import { el, formatCount, svg } from './ui.js';
 import { ViewGrid } from './views.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
-// grey as context (filtered out), drawn in its color (shown)
+// as context (filtered out: grey, or in its color), drawn in its color (shown)
 const NO_POSITION_STATE = 0;
 const CONTEXT_STATE = 1;
 const SHOWN_STATE = 2;
@@ -123,20 +123,24 @@ class App {
     return this.views.filter((view) => view.settings === settings);
   }
 
-  // View: number of views, embedding, sides, rotation, axes, point size and the opacity of shown and filtered-out
-  // cells. Axes, point size, opacities and the turn axis belong to the selected view's settings
+  // View: number of views, embedding, sides, rotation, axes, and the point size and opacity of shown and
+  // filtered-out cells. Axes, point sizes, opacities, filtered-out colors and the turn axis belong to the selected
+  // view's settings
   buildViewControls() {
     this.grid.buildViewCount();
-    // Settings shared by linked views (filters, turn axis, point size, opacities, axes); an unlinked view has its
-    // own copy (views.js). Made here, from the controls' starting values
+    // Settings shared by linked views (filters, turn axis, point sizes, opacities, filtered-out colors, axes); an
+    // unlinked view has its own copy (views.js). Made here, from the controls' starting values
     this.group = {
       filters: [],
       // The axis drags turn about (index into the axes, null: any), from convert.py --locked
       turnAxis: openingTurnAxis(this.manifest.axes.labels, this.manifest.defaults.locked),
-      // The point size slider is log2 of the size (0: the default size)
+      // Shown and filtered-out cells' point sizes (the sliders are log2 of the size, 0: the default size), opacities,
+      // and whether filtered-out cells keep their colors
       pointSize: 2 ** Number(document.getElementById('point-size').value),
       shownOpacity: Number(document.getElementById('shown-opacity').value),
+      contextPointSize: 2 ** Number(document.getElementById('context-point-size').value),
       contextOpacity: Number(document.getElementById('context-opacity').value),
+      contextColors: document.getElementById('context-colors').checked,
       showAxes: document.getElementById('show-axes').checked,
     };
 
@@ -157,7 +161,9 @@ class App {
     };
     control('point-size', 'pointSize', (input) => 2 ** Number(input.value));
     control('shown-opacity', 'shownOpacity', (input) => Number(input.value));
+    control('context-point-size', 'contextPointSize', (input) => 2 ** Number(input.value));
     control('context-opacity', 'contextOpacity', (input) => Number(input.value));
+    control('context-colors', 'contextColors', (input) => input.checked);
     control('show-axes', 'showAxes', (input) => input.checked);
   }
 
@@ -167,7 +173,9 @@ class App {
     scene.turnAxis = settings.turnAxis;
     scene.setPointSize(settings.pointSize);
     scene.setShownOpacity(settings.shownOpacity);
+    scene.setContextPointSize(settings.contextPointSize);
     scene.setContextOpacity(settings.contextOpacity);
+    scene.setContextColors(settings.contextColors);
     scene.setAxesVisible(settings.showAxes);
     view.axisLabelsElement.hidden = !settings.showAxes;
     // With a turn axis, the other axes of a 3D view are drawn as locked (2D views do not turn)
@@ -182,7 +190,9 @@ class App {
     const { settings } = this;
     document.getElementById('point-size').value = Math.log2(settings.pointSize);
     document.getElementById('shown-opacity').value = settings.shownOpacity;
+    document.getElementById('context-point-size').value = Math.log2(settings.contextPointSize);
     document.getElementById('context-opacity').value = settings.contextOpacity;
+    document.getElementById('context-colors').checked = settings.contextColors;
     document.getElementById('show-axes').checked = settings.showAxes;
     document.getElementById('filters').replaceChildren(...settings.filters.map((f) => f.panel));
     this.showReadouts();
@@ -195,7 +205,9 @@ class App {
     const { settings } = this;
     const scene = this.selected?.scene;
     const output = (id) => document.querySelector(`output[for="${id}"]`);
-    output('point-size').textContent = scene?.fit ? `${scene.framedDiameter(settings.pointSize).toFixed(1)} px` : '';
+    const px = (size) => (scene?.fit ? `${scene.framedDiameter(size).toFixed(1)} px` : '');
+    output('point-size').textContent = px(settings.pointSize);
+    output('context-point-size').textContent = px(settings.contextPointSize);
     output('shown-opacity').textContent = percent(settings.shownOpacity);
     output('context-opacity').textContent = percent(settings.contextOpacity);
   }

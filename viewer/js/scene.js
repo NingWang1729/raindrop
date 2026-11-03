@@ -1,9 +1,10 @@
 // WebGL point cloud: one point per cell, drawn by three.js.
 //
-// Each cell has a state: 0 = not drawn (no position), 1 = context (filtered out, drawn grey at its own opacity),
-// 2 = shown (passes the filters, drawn in its color). Two Points objects share one geometry, each drawn opaque
-// with depth writes at 100% (points of a pixel or more), else transparent without depth writes (updateBlending):
-// the first draws shown cells, the second context cells after them, so translucent context never hides shown cells.
+// Each cell has a state: 0 = not drawn (no position), 1 = context (filtered out, drawn grey or in its color at its
+// own size and opacity), 2 = shown (passes the filters, drawn in its color). Two Points objects share one geometry,
+// each drawn opaque with depth writes at 100% (points of a pixel or more), else transparent without depth writes
+// (updateBlending): the first draws shown cells, the second context cells after them, so translucent context never
+// hides shown cells.
 //
 // Frames: data (the embedding's axes, data units); world = the data turned about its center by the data's
 // rotation (`model`); camera (three.js: x right, y up, looking down -z); screen = the tile in CSS px, x right
@@ -86,18 +87,19 @@ const VERTEX_SHADER = `
 `;
 
 // Fragment shader. Round points: gl_PointCoord runs 0..1 across the square sprite, so c is the offset from its
-// center and dot(c, c) > 0.25 (radius 0.5 squared) is outside the inscribed disc. Context cells are drawn in one
-// mid grey (0.55) whatever their color; alpha is the object's opacity times the pixel coverage
+// center and dot(c, c) > 0.25 (radius 0.5 squared) is outside the inscribed disc. With uGrey (context cells, unless
+// they keep their colors) cells are drawn in one mid grey (0.55) whatever their color; alpha is the object's opacity
+// times the pixel coverage
 const FRAGMENT_SHADER = `
   uniform float uOpacity;
-  uniform float uContext;
+  uniform float uGrey;
   varying vec3 vColor;
   varying float vDraw;
   varying float vCover;
   void main() {
     vec2 c = gl_PointCoord - 0.5;
     if (vDraw < 0.5 || dot(c, c) > 0.25) discard;
-    vec3 rgb = uContext > 0.5 ? vec3(0.55) : vColor;
+    vec3 rgb = uGrey > 0.5 ? vec3(0.55) : vColor;
     gl_FragColor = vec4(rgb, uOpacity * vCover);
   }
 `;
@@ -160,11 +162,12 @@ export class PointCloudView {
       this.onCameraChange();
     });
 
-    // The two Points objects share the geometry and the size uniforms (the same objects, so one write
-    // updates both). Context is drawn after shown (renderOrder 1): blending over it while translucent, depth-tested
-    // against it like any opaque object at 100% (three.js draws opaque objects before transparent ones)
+    // The two Points objects share the geometry and the scale uniform (the same object, so one write updates
+    // both); each has its own size, set by setPointSize and setContextPointSize. Context is drawn after shown
+    // (renderOrder 1): blending over it while translucent, depth-tested against it like any opaque object at 100%
+    // (three.js draws opaque objects before transparent ones)
     this.geometry = new THREE.BufferGeometry();
-    this.uniforms = { uSize: { value: 1 }, uScale: { value: 1 } };
+    this.uniforms = { uScale: { value: 1 } };
     this.shown = this.makePoints(SHOWN_STATE, 1, false);
     this.context = this.makePoints(CONTEXT_STATE, CONTEXT_OPACITY, true);
     this.context.renderOrder = 1;
@@ -199,6 +202,7 @@ export class PointCloudView {
     this.listenFor2DNavigation();
 
     this.pointSize = 1;
+    this.contextPointSize = 1;
     new ResizeObserver(() => this.resize()).observe(container);
   }
 
@@ -211,8 +215,8 @@ export class PointCloudView {
       uniforms: {
         uDrawState: { value: drawState },
         uOpacity: { value: opacity },
-        uContext: { value: isContext ? 1 : 0 },
-        uSize: this.uniforms.uSize,
+        uGrey: { value: isContext ? 1 : 0 },
+        uSize: { value: 1 },
         uScale: this.uniforms.uScale,
       },
       vertexShader: VERTEX_SHADER,
@@ -248,6 +252,7 @@ export class PointCloudView {
     // 2D views zoom about the pointer themselves (listenFor2DNavigation); TrackballControls zooms about the center
     this.controls.noZoom = is2D;
     this.setPointSize(this.pointSize);
+    this.setContextPointSize(this.contextPointSize);
   }
 
   // The bounding box's 12 edges, as pairs of end points (data units): for each axis, the 4 edges along it at
@@ -320,7 +325,20 @@ export class PointCloudView {
   // tile 400 device px tall; smaller points fade (see VERTEX_SHADER)
   setPointSize(size) {
     this.pointSize = size;
-    this.uniforms.uSize.value = size * this.extent / EXTENT_PER_UNIT_POINT_SIZE;
+    this.shown.material.uniforms.uSize.value = size * this.extent / EXTENT_PER_UNIT_POINT_SIZE;
+    this.render();
+  }
+
+  // Point size of context (filtered-out) cells, on the same scale as setPointSize's
+  setContextPointSize(size) {
+    this.contextPointSize = size;
+    this.context.material.uniforms.uSize.value = size * this.extent / EXTENT_PER_UNIT_POINT_SIZE;
+    this.render();
+  }
+
+  // Whether context cells are drawn in their colors rather than grey
+  setContextColors(keep) {
+    this.context.material.uniforms.uGrey.value = keep ? 0 : 1;
     this.render();
   }
 
