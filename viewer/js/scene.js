@@ -2,9 +2,9 @@
 //
 // Each cell has a state: 0 = not drawn (no position), 1 = context (filtered out, drawn grey or in its color at its
 // own size and opacity), 2 = shown (passes the filters, drawn in its color). Two Points objects share one geometry,
-// each drawn opaque with depth writes at 100% (points of a pixel or more), else transparent without depth writes
-// (updateBlending): the first draws shown cells, the second context cells after them, so translucent context never
-// hides shown cells.
+// each drawn opaque at 100% with points of a pixel or more, else transparent (updateBlending). Shown points of a pixel
+// or more write depth at any opacity; context points only when opaque. The first object draws shown cells, the
+// second context cells after them, so translucent context never hides shown cells.
 //
 // Frames: data (the embedding's axes, data units); world = the data turned about its center by the data's
 // rotation (`model`); camera (three.js: x right, y up, looking down -z); screen = the tile in CSS px, x right
@@ -596,28 +596,35 @@ export class PointCloudView {
     return [0, 1, 2].map((k) => this.dataAxis(k).applyQuaternion(toCamera).toArray());
   }
 
-  // Opacity of shown cells: opaque ones hide what lies behind them (depth written); fainter ones blend, so
-  // dense regions look darker, and no longer hide other points; at 0 they are not drawn at all
+  // Opacity of shown cells: opaque ones hide what lies behind them; fainter ones blend over what was drawn before
+  // them, but still write depth, so cells behind them drawn later stay hidden (updateBlending); at 0 they are not
+  // drawn at all
   setShownOpacity(opacity) {
     this.shown.material.uniforms.uOpacity.value = opacity;
     this.shown.visible = opacity > 0;
     this.render();
   }
 
-  // A Points object's points blend (without depth writes) when translucent or smaller than a pixel at the target's
-  // distance (the shader fades those by their area, which only shows when blending); otherwise they are opaque.
-  // Shown and context points follow the same rule, so filtered-out cells at 100% hide what is behind them. Checked
-  // before each drawn frame, as zooming changes their size on screen; the material is recompiled only when this
-  // switches
+  // A Points object's points blend when translucent or smaller than a pixel at the target's distance (the shader
+  // fades those by their area, which only shows when blending); otherwise they are opaque. Shown and context points
+  // follow the same rule, so filtered-out cells at 100% hide what is behind them. Depth writes:
+  // - shown points a pixel or more wide keep them when translucent, so the nearest cell is the last layer blended in
+  //   each pixel: a fragment passes the depth test only if nearer than all that passed before it (cells behind show
+  //   through only where drawn earlier);
+  // - sub-pixel shown points do not, as their faint dots must add up to show the density;
+  // - context points (the faint group, one alpha) write depth only when opaque.
+  // Checked before each drawn frame, as zooming changes their size on screen; the material is recompiled only when
+  // this switches
   updateBlending(points) {
     const { material } = points;
     const distance = this.camera.position.distanceTo(this.controls.target);
     // Point diameter in device px at the target's distance, as in VERTEX_SHADER
     const pixels = material.uniforms.uSize.value * this.uniforms.uScale.value / distance;
     const blend = material.uniforms.uOpacity.value < 1 || pixels < 1;
-    if (material.transparent === blend) return;
+    const depthWrite = points === this.shown ? pixels >= 1 : !blend;
+    if (material.transparent === blend && material.depthWrite === depthWrite) return;
     material.transparent = blend;
-    material.depthWrite = !blend;
+    material.depthWrite = depthWrite;
     material.needsUpdate = true;
   }
 

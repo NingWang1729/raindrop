@@ -37,7 +37,7 @@
             <th>Shown</th>
             <td><input id="point-size" type="range" min="-4" max="3" step="0.1" value="0" title="Point size of shown cells (log scale)"></td>
             <td><output for="point-size" title="Diameter when the whole view is in frame, in CSS px"></output></td>
-            <td><input id="shown-opacity" type="range" min="0" max="1" step="0.01" value="1" title="Opacity of shown cells. Below 100%, or for points smaller than a pixel, they blend in the order cells are stored"></td>
+            <td><input id="shown-opacity" type="range" min="0" max="1" step="0.01" value="1" title="Opacity of shown cells. Below 100% the nearest cell stays on top; cells behind show through only where they were drawn earlier. Points smaller than a pixel blend in the order cells are stored"></td>
             <td><output for="shown-opacity"></output></td>
           </tr>
           <tr>
