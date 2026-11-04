@@ -75,6 +75,8 @@ button:hover { border-color: var(--accent); }
 .turn-about[hidden] { display: none; }
 /* Short usage hints, e.g. what Shift does to a drag */
 .hint { font-size: 11px; color: var(--muted); margin: 2px 0 4px; }
+/* The Reverse note stands out, so ticked values are not read as the cells shown */
+#reverse-note { color: var(--accent); font-weight: 600; }
 #rotation { width: 100%; border-collapse: collapse; margin: 4px 0; }
 #rotation th { text-align: left; font-weight: 600; width: 28px; }
 #rotation td { padding: 1px 2px; }

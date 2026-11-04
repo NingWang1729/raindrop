@@ -5,6 +5,7 @@
 //   {field, kind: 'range', values: Float32Array per cell, min: number or null, max: number or null}
 // A category filter with nothing ticked (allowed === null) or a range with no bounds restricts nothing.
 // All active filters combine with AND. Keep masks are Uint8Arrays with 1 (kept) or 0 per cell.
+// Reversed, the cells shown are those the filters do not keep (reverseKeep).
 
 // Whether the filter restricts anything (see above)
 export function isActive(filter) {
@@ -39,6 +40,14 @@ export function computeKeep(base, filters, skip = null) {
     if (filter !== skip && isActive(filter)) applyFilter(filter, keep);
   }
   return keep;
+}
+
+// New mask of the cells set in `base` but not in `keep` (the complement of keep within base, so cells outside base
+// stay 0); neither input is changed
+export function reverseKeep(base, keep) {
+  const reversed = new Uint8Array(base.length);
+  for (let i = 0; i < base.length; i++) reversed[i] = base[i] && !keep[i] ? 1 : 0;
+  return reversed;
 }
 
 // Number of kept cells in each category (codes must be below nCategories)

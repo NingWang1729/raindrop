@@ -29,6 +29,16 @@ const tests = {
     assert.equal(filters.countKept(others), 2);
   },
 
+  'reversing a keep mask takes its complement within the base mask'() {
+    // The last cell has no position (not in base): it stays out of the reversed mask
+    const base = Uint8Array.from([1, 1, 1, 0]);
+    const keep = Uint8Array.from([1, 0, 0, 0]);
+    assert.deepEqual([...filters.reverseKeep(base, keep)], [0, 1, 1, 0]);
+    // Neither input changes
+    assert.deepEqual([...base], [1, 1, 1, 0]);
+    assert.deepEqual([...keep], [1, 0, 0, 0]);
+  },
+
   'setting several categories at once; none ticked turns the filter off'() {
     const filter = { kind: 'category', values: Uint8Array.from([0, 1, 2]), allowed: null };
     filters.setCategories(filter, 4, [0, 2, 3], true);
