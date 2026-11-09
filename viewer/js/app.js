@@ -26,9 +26,9 @@ const REVERSED_NOTE = 'Showing everything except the selection';
 const NO_EFFECT_NOTE = 'No filter set: Reverse has no effect';
 const REVERSED_COUNT_MARK = ' (all except the selection)';
 
-// An opacity (a fraction) as the readouts show it, in whole percent
+// An opacity (a fraction) as its number box shows it, in whole percent
 function percent(fraction) {
-  return `${Math.round(fraction * 100)}%`;
+  return Math.round(fraction * 100);
 }
 
 class App {
@@ -157,21 +157,58 @@ class App {
 
     this.turning.buildRotationSliders();
 
-    // Each control changes the selected view's settings, and so every view that shares them
+    // Each control changes the selected view's settings, and so every view that shares them. The size sliders are
+    // log2 of the size, the opacity sliders the opacity itself
+    const fromLog2 = (log2Size) => 2 ** log2Size;
+    const setSetting = (key, value) => {
+      this.settings[key] = value;
+      for (const view of this.viewsWith(this.settings)) this.applySettings(view);
+      this.showBoxes();
+    };
     const control = (id, key, read) => {
       const input = document.getElementById(id);
-      input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
-        this.settings[key] = read(input);
-        for (const view of this.viewsWith(this.settings)) this.applySettings(view);
-        this.showReadouts();
-      });
+      input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => setSetting(key, read(input)));
     };
-    control('point-size', 'pointSize', (input) => 2 ** Number(input.value));
+    control('point-size', 'pointSize', (input) => fromLog2(Number(input.value)));
     control('shown-opacity', 'shownOpacity', (input) => Number(input.value));
-    control('context-point-size', 'contextPointSize', (input) => 2 ** Number(input.value));
+    control('context-point-size', 'contextPointSize', (input) => fromLog2(Number(input.value)));
     control('context-opacity', 'contextOpacity', (input) => Number(input.value));
     control('context-colors', 'contextColors', (input) => input.checked);
     control('show-axes', 'showAxes', (input) => input.checked);
+
+    // The number box beside each size and opacity slider: a typed value applies on Enter or when the box loses focus
+    // ('change', as for the rotation angle boxes), rounded to the box's step (0.1 px, 1%) so that the box then shows
+    // the setting. toSlider maps it to the slider's units and the result is clamped to the slider's range
+    // (out-of-range values take the nearest end); the slider moves to its nearest step, while the setting takes the
+    // exact value, read as the slider's value is. Text that is not a number (valueAsNumber NaN), or a size typed
+    // before the view is framed, changes nothing, and the box shows the current value again
+    const numberBox = (id, key, toSlider, read) => {
+      const slider = document.getElementById(id);
+      const box = document.getElementById(`${id}-box`);
+      box.addEventListener('change', () => {
+        const step = Number(box.step);
+        const value = toSlider(Math.round(box.valueAsNumber / step) * step);
+        if (Number.isNaN(value)) {
+          this.showBoxes();
+          return;
+        }
+        const clamped = Math.min(Math.max(value, Number(slider.min)), Number(slider.max));
+        slider.value = clamped;
+        setSetting(key, read(clamped));
+      });
+    };
+    // A size box holds the framed diameter in CSS px, which is proportional to the size, so the slider (log2 of the
+    // size) is log2(px / the diameter of size 1). 0 or negative px give log2(0) = -Infinity, clamped to the smallest
+    // size; NaN before the selected view is framed
+    const sizeToSlider = (diameterPx) => {
+      const scene = this.selected?.scene;
+      if (!scene?.fit) return NaN;
+      return Math.log2(Math.max(diameterPx, 0) / scene.framedDiameter(1));
+    };
+    numberBox('point-size', 'pointSize', sizeToSlider, fromLog2);
+    numberBox('context-point-size', 'contextPointSize', sizeToSlider, fromLog2);
+    numberBox('shown-opacity', 'shownOpacity', (percentValue) => percentValue / 100, (fraction) => fraction);
+    numberBox('context-opacity', 'contextOpacity', (percentValue) => percentValue / 100, (fraction) => fraction);
     // Reverse changes which cells are shown, so it refreshes the views rather than only applying settings
     const reverse = document.getElementById('reverse-filters');
     reverse.addEventListener('change', () => {
@@ -209,21 +246,22 @@ class App {
     document.getElementById('show-axes').checked = settings.showAxes;
     document.getElementById('reverse-filters').checked = settings.reverseFilters;
     document.getElementById('filters').replaceChildren(...settings.filters.map((f) => f.panel));
-    this.showReadouts();
+    this.showBoxes();
     this.turning.showTurnAxis();
   }
 
-  // The side panel's readouts of the selected view's settings: Point size as the point's diameter in CSS px when the
-  // view is framed (empty until its embedding has framed it), the opacities in percent
-  showReadouts() {
+  // The side panel's number boxes show the selected view's settings: Point size as the point's diameter in CSS px
+  // when the view is framed (empty and disabled until its embedding has framed it), the opacities in percent
+  showBoxes() {
     const { settings } = this;
     const scene = this.selected?.scene;
-    const output = (id) => document.querySelector(`output[for="${id}"]`);
-    const px = (size) => (scene?.fit ? `${scene.framedDiameter(size).toFixed(1)} px` : '');
-    output('point-size').textContent = px(settings.pointSize);
-    output('context-point-size').textContent = px(settings.contextPointSize);
-    output('shown-opacity').textContent = percent(settings.shownOpacity);
-    output('context-opacity').textContent = percent(settings.contextOpacity);
+    const box = (id) => document.getElementById(`${id}-box`);
+    for (const [id, size] of [['point-size', settings.pointSize], ['context-point-size', settings.contextPointSize]]) {
+      box(id).disabled = !scene?.fit;
+      box(id).value = scene?.fit ? scene.framedDiameter(size).toFixed(1) : '';
+    }
+    box('shown-opacity').value = percent(settings.shownOpacity);
+    box('context-opacity').value = percent(settings.contextOpacity);
   }
 
   // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels, a
@@ -250,7 +288,7 @@ class App {
     view.scene.onCameraChange = () => this.grid.syncFrom(view);
     // The framed point size follows the tile's size
     view.scene.onResize = () => {
-      if (view === this.selected) this.showReadouts();
+      if (view === this.selected) this.showBoxes();
     };
     // The axis widget and labels follow every drawn frame (turns, zoom, pan, resize)
     view.scene.onRender = () => {
@@ -329,7 +367,7 @@ class App {
     }
     this.showFace(view, axis, side);
     // The framed point size depends on the embedding's extent and framing
-    if (view === this.selected) this.showReadouts();
+    if (view === this.selected) this.showBoxes();
     if (view.color) await this.coloring.setColor(view, view.color);
     this.refresh();
   }
