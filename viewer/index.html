@@ -29,7 +29,8 @@
       <label class="slider">Show axes <input id="show-axes" type="checkbox" checked></label>
       <!-- Point size and opacity of the cells passing the filters (Shown) and of the filtered-out cells, each slider
            with a number box (app.js) to read or type the value: the point diameter in CSS px when the view is framed
-           (disabled until then), opacities in percent -->
+           (disabled until then), opacities in percent. A dataset can set their starting values (convert.py
+           --start-style, which checks sizes against the size sliders' range, -4 to 3 in log2) -->
       <table id="cell-styles" aria-label="Point size and opacity of shown and filtered-out cells">
         <colgroup><col class="group"><col><col class="box"><col><col class="box"></colgroup>
         <thead><tr><th></th><th colspan="2">Point size (px)</th><th colspan="2">Opacity (%)</th></tr></thead>

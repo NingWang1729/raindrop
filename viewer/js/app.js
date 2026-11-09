@@ -26,6 +26,16 @@ const REVERSED_NOTE = 'Showing everything except the selection';
 const NO_EFFECT_NOTE = 'No filter set: Reverse has no effect';
 const REVERSED_COUNT_MARK = ' (all except the selection)';
 
+// The controls each key of the manifest's defaults.style (convert.py --start-style) sets: sizes (multiples of the
+// default size) on the log2 size sliders, opacities (fractions) on the opacity sliders, keep_colors on the switch
+const START_STYLE_CONTROLS = {
+  shown_size: { id: 'point-size', log2: true },
+  shown_opacity: { id: 'shown-opacity', log2: false },
+  filtered_size: { id: 'context-point-size', log2: true },
+  filtered_opacity: { id: 'context-opacity', log2: false },
+  keep_colors: { id: 'context-colors' },
+};
+
 // An opacity (a fraction) as its number box shows it, in whole percent
 function percent(fraction) {
   return Math.round(fraction * 100);
@@ -103,6 +113,8 @@ class App {
     const { manifest } = this;
     document.title = `${manifest.name} - Raindrop`;
     document.getElementById('title').textContent = manifest.name;
+    // The dataset's starting style goes into the controls before buildViewControls reads the settings from them
+    this.setStartStyle();
     this.buildViewControls();
     this.coloring.buildColorControls();
     this.legend.buildLegend();
@@ -111,11 +123,59 @@ class App {
     const view = this.createView();
     this.select(view);
     await this.setEmbedding(view, manifest.defaults.embedding);
-    // Panels for convert.py --filters
+    // Panels for convert.py --filters, with the values of --select ticked
     for (const name of manifest.defaults.filters) await this.panels.addFilter(name);
+    await this.selectStartValues();
     // Color by convert.py --color, else the first categorical column
     const firstCategory = manifest.fields.find((f) => f.kind === 'category');
     await this.coloring.setColor(view, { kind: 'field', name: manifest.defaults.color ?? firstCategory?.name });
+  }
+
+  // Tick the values of convert.py --select (the manifest's defaults.selected, absent in older manifests) in their
+  // columns' filter panels, then refresh once. The filters belong to the linked views' shared settings, so every
+  // linked view, and each view added later, starts with them. A column without a --filters panel gets one here. A
+  // column that is not categorical, or a value it lacks, stops the viewer with a message (main shows it in the status
+  // line)
+  async selectStartValues() {
+    const selected = Object.entries(this.manifest.defaults.selected ?? {});
+    for (const [name, values] of selected) {
+      const filter = await this.panels.addFilter(name);
+      if (filter.kind !== 'category') throw new Error(`The dataset ticks values of ${name}, which is numeric and has no values to tick`);
+      const codes = values.map((value) => {
+        const code = filter.field.categories.indexOf(value);
+        if (code < 0) throw new Error(`The dataset ticks ${value}, which is not a value of ${name}`);
+        return code;
+      });
+      filters.setCategories(filter, filter.field.categories.length, codes, true);
+    }
+    if (selected.length) this.refresh();
+  }
+
+  // Set the Shown / Filtered out controls to convert.py --start-style (the manifest's defaults.style; keys left out,
+  // or an older manifest without it, keep index.html's starting values), before buildViewControls reads the settings
+  // from them (init). A range input takes its nearest step (0.1 in log2 of the size, 0.01 in opacity), and the
+  // settings take the slider's value. A key the viewer does not know, or a value that is not a number in its slider's
+  // range (or a boolean for keep_colors), stops the viewer with a message naming the valid keys or values
+  setStartStyle() {
+    for (const [key, value] of Object.entries(this.manifest.defaults.style ?? {})) {
+      const control = START_STYLE_CONTROLS[key];
+      if (!control) throw new Error(`Unknown starting style ${key} in the dataset; the keys are ${Object.keys(START_STYLE_CONTROLS).join(', ')}`);
+      const input = document.getElementById(control.id);
+      if (input.type === 'checkbox') {
+        if (typeof value !== 'boolean') throw new Error(`The dataset's starting ${key} must be true or false, not ${value}`);
+        input.checked = value;
+        continue;
+      }
+      if (typeof value !== 'number') throw new Error(`The dataset's starting ${key} must be a number, not ${JSON.stringify(value)}`);
+      const sliderValue = control.log2 ? Math.log2(value) : value;
+      const [min, max] = [Number(input.min), Number(input.max)];
+      // Written as !(inside) so that NaN fails too; the range is given in the manifest's units
+      if (!(sliderValue >= min && sliderValue <= max)) {
+        const range = control.log2 ? `${2 ** min} to ${2 ** max}` : `${min} to ${max}`;
+        throw new Error(`The dataset's starting ${key} ${value} is outside ${range}`);
+      }
+      input.value = sliderValue;
+    }
   }
 
   // The selected view's settings (the linked views' shared settings before any view exists)
@@ -134,7 +194,7 @@ class App {
   buildViewControls() {
     this.grid.buildViewCount();
     // Settings shared by linked views (filters, turn axis, point sizes, opacities, filtered-out colors, axes); an
-    // unlinked view has its own copy (views.js). Made here, from the controls' starting values
+    // unlinked view has its own copy (views.js). Made here, from the controls' starting values (the dataset's, if set)
     this.group = {
       filters: [],
       // The axis drags turn about (index into the axes, null: any), from convert.py --locked
