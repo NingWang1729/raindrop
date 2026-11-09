@@ -1,4 +1,4 @@
-// Tests for the viewer's pure-logic modules (data, positions, colors, filters, hierarchy, rotation, names).
+// Tests for the viewer's pure-logic modules (data, positions, colors, filters, hierarchy, rotation, names, picking).
 // Run with: node tests/test_viewer.mjs
 import assert from 'node:assert/strict';
 import * as filters from '../viewer/js/filters.js';
@@ -6,7 +6,8 @@ import { Dataset, decodeSteps } from '../viewer/js/data.js';
 import { categoryPalette, colorCategories, colorValues, colormap, generatedColor, geneColors, parseHex, quantile, sortedFinite, toHex } from '../viewer/js/colors.js';
 import { bounds, faceView, framedDiameterPx, niceTicks, readsHighToLow, tickTarget, toXYZ, uprightAngle, validMask } from '../viewer/js/positions.js';
 import { groupState, treeRows } from '../viewer/js/hierarchy.js';
-import { axisLabels, axisTitle, capitalize, colorLabel, endLabel, widgetEndLabel } from '../viewer/js/names.js';
+import { axisLabels, axisTitle, capitalize, cellValueText, colorLabel, endLabel, widgetEndLabel } from '../viewer/js/names.js';
+import { buildScreenGrid, makeProjection, nearestCell, projectShownCells } from '../viewer/js/picking.js';
 import { anglesToMatrix, clampDegrees, continuousAngles, dragDirection, faceRotation, knobTurn, openingTurnAxis, recentMovement, wrapTurns } from '../viewer/js/rotation.js';
 
 const tests = {
@@ -370,6 +371,84 @@ const tests = {
     const manifest = { axes: { labels: ['AP', 'DV', 'LR'] } };
     assert.deepEqual(axisLabels(manifest, { labels: ['UMAP 1', 'UMAP 2', 'UMAP 3'] }), ['UMAP 1', 'UMAP 2', 'UMAP 3']);
     assert.deepEqual(axisLabels(manifest, {}), ['AP', 'DV', 'LR']);
+  },
+
+  'hover picking projects only shown cells in front of the camera and inside the tile, to tile px with depth w'() {
+    // Data -> clip matrix (column-major, as three.js stores it): clip = (x, y, 0, z), so NDC = (x / z, y / z, 0) and
+    // the depth w is z. In a 100 x 100 tile NDC x 0.5 is px 75 and NDC y 0.5 is px 25 (screen y points down)
+    const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+    const xyz = Float32Array.from([
+      1, 1, 2, // shown, NDC (0.5, 0.5)
+      0, 0, 2, // filtered out (state 1)
+      0, 0, 2, // no position (state 0)
+      0, 0, -1, // behind the camera (w < 0)
+      3, 0, 1, // outside the tile (NDC x 3)
+      0, 0, 4, // shown, at the center
+    ]);
+    const state = Float32Array.from([2, 1, 0, 2, 2, 2]);
+    const projected = projectShownCells(makeProjection(6), xyz, state, 2, matrix, 100, 100);
+    assert.equal(projected.count, 2);
+    assert.deepEqual([...projected.cells.subarray(0, 2)], [0, 5]);
+    assert.deepEqual([...projected.x.subarray(0, 2)], [75, 50]);
+    assert.deepEqual([...projected.y.subarray(0, 2)], [25, 50]);
+    assert.deepEqual([...projected.depth.subarray(0, 2)], [2, 4]);
+  },
+
+  'hover picking takes the cell nearest the camera within the radius, ties going to the nearest to the pointer'() {
+    // clip = (x, y, 0, z) as above; in a 100 x 100 tile a cell at depth z and px (sx, 50) has x = (sx / 50 - 1) * z
+    const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+    const at = (sx, z) => [(sx / 50 - 1) * z, 0, z];
+    const pick = (cells, states, px, radius = 4) => {
+      const xyz = Float32Array.from(cells.flat());
+      const projected = projectShownCells(makeProjection(states.length), xyz, Float32Array.from(states), 2, matrix, 100, 100);
+      return nearestCell(projected, buildScreenGrid(null, projected, 100, 100, 4), px, 50, radius);
+    };
+    // Cell 1, 2 px from the pointer but nearer the camera, wins over cell 0 under the pointer
+    assert.equal(pick([at(50, 4), at(52, 2)], [2, 2], 50), 1);
+    // Farther than the radius from the pointer: none
+    assert.equal(pick([at(50, 4), at(52, 2)], [2, 2], 60), -1);
+    // Equal depth (as every cell of a 2D embedding): the one nearer the pointer
+    assert.equal(pick([at(49, 3), at(53, 3)], [2, 2], 52), 1);
+    // A cell in the neighbouring bucket (buckets are 4 px: px 47.9 and 50.5 fall in different ones) is found
+    assert.equal(pick([at(47.9, 3)], [2], 50.5), 0);
+    // A filtered-out cell nearer the camera is skipped
+    assert.equal(pick([at(50, 4), at(50, 2)], [2, 1], 50), 0);
+    // No shown cell at all
+    assert.equal(pick([at(50, 4)], [1], 50), -1);
+    // A cell on the tile's right edge (px 100) is kept in the last column of buckets, and found
+    assert.equal(pick([at(100, 3)], [2], 98), 0);
+  },
+
+  'hover picking follows a turn of the data, and reuses its buffers for the next picture'() {
+    // Two cells on the line of sight through the tile's center, at data z = +1 and -1. The camera looks down -z from
+    // z = 5: camera z = data z - 5, and w = -(camera z) = 5 - z, so the cell at z = +1 is nearer (w 4). Turned by
+    // 180 degrees about y (x -> -x, z -> -z) the other one is nearer. clip = (x, y, 0, w); column-major entries
+    // m[8 + 3] and m[12 + 3] give w = -z + 5, or w = z + 5 after the turn
+    const xyz = Float32Array.from([0, 0, 1, 0, 0, -1]);
+    const state = Float32Array.from([2, 2]);
+    const front = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, 0, 5];
+    const turned = [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 5];
+    const projection = makeProjection(2);
+    projectShownCells(projection, xyz, state, 2, front, 100, 100);
+    const grid = buildScreenGrid(null, projection, 100, 100, 4);
+    assert.equal(nearestCell(projection, grid, 50, 50, 4), 0);
+    projectShownCells(projection, xyz, state, 2, turned, 100, 100);
+    const regrid = buildScreenGrid(grid, projection, 100, 100, 4);
+    assert.equal(regrid.order, grid.order);
+    assert.equal(nearestCell(projection, regrid, 50, 50, 4), 1);
+  },
+
+  'hover labels give a category its name, and a gene or number its name and value to 3 significant digits'() {
+    const sources = [{ name: 'measured' }, { name: 'smoothed', scale: 'log2' }];
+    const region = { kind: 'category', categories: ['r0', 'r1', 'NA'] };
+    assert.equal(cellValueText({ kind: 'field', name: 'region' }, region, 1, sources), 'r1');
+    assert.equal(cellValueText({ kind: 'field', name: 'region' }, region, 2, sources), 'NA');
+    assert.equal(cellValueText({ kind: 'gene', source: 'measured', name: 'Pcp4' }, null, 2.3456, sources), 'Pcp4: 2.35');
+    assert.equal(cellValueText({ kind: 'gene', source: 'measured', name: 'Pcp4' }, null, 7, sources), 'Pcp4: 7');
+    assert.equal(cellValueText({ kind: 'field', name: 'depth' }, { kind: 'numeric' }, 1234.5, sources), 'depth: 1230');
+    assert.equal(cellValueText({ kind: 'gene', source: 'measured', name: 'Pcp4' }, null, NaN, sources), 'Pcp4: no value');
+    // A source on its own scale (--log-scaled) names it, as the value is not a count
+    assert.equal(cellValueText({ kind: 'gene', source: 'smoothed', name: 'Pcp4' }, null, 3.14159, sources), 'Pcp4 (log2): 3.14');
   },
 };
 
