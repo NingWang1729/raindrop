@@ -51,6 +51,20 @@ AXIS_OF_ROLE = {'AP': 'AP', 'PA': 'AP', 'DV': 'DV', 'VD': 'DV', 'LR': 'LR', 'RL'
 # Axis names of common non-spatial embeddings, by obsm key without 'X_', lowercased
 METHOD_AXIS_NAMES = {'umap': 'UMAP', 'tsne': 't-SNE', 'pca': 'PC'}
 
+# --start-style keys: the side panel's Shown / Filtered out table (point sizes as multiples of the default size,
+# opacities as fractions) and its Keep colors switch
+SIZE_KEYS = ('shown_size', 'filtered_size')
+OPACITY_KEYS = ('shown_opacity', 'filtered_opacity')
+KEEP_COLORS_KEY = 'keep_colors'
+STYLE_KEYS = (*SIZE_KEYS, *OPACITY_KEYS, KEEP_COLORS_KEY)
+# Range of the viewer's point size sliders (viewer/index.html: log2 of the size from -4 to 3)
+MIN_POINT_SIZE = 2 ** -4
+MAX_POINT_SIZE = 2 ** 3
+# The command line gives opacities in percent, as the side panel's boxes show them
+PERCENT = 100
+# Words of the command line's keep-colors value
+ON_OFF = {'on': True, 'off': False}
+
 
 def write_array(path, array, dtype):
     """Write a numpy array as raw little-endian bytes, creating its folder."""
@@ -252,6 +266,47 @@ def check_locked(locked, axis_labels):
     # The viewer turns the data about any axis (none locked) or about the one axis left free (two locked)
     if len(set(locked)) not in (0, 2):
         raise ValueError(f'--locked {" ".join(locked)}: lock two axes (drags then turn about the third) or none')
+
+
+def check_selected(selected, filters, obs):
+    """Raise if --select names a column without a filter panel or a numeric one, gives no value, or gives values
+    that are not among the column's categories (as the viewer names them: missing values are 'NA')."""
+    for column, values in selected.items():
+        if column not in filters:
+            raise ValueError(f'--select {column}: {column} is not a --filters column; add it to --filters {list(filters)}')
+        if is_numeric(obs[column]):
+            raise ValueError(f'--select {column}: {column} is numeric; its filter has bounds, not values to tick')
+        if not values:
+            raise ValueError(f'--select {column} needs at least one value')
+        _, categories = category_codes(obs[column])
+        unknown = [str(v) for v in values if str(v) not in categories]
+        if unknown:
+            raise ValueError(f'--select {column}: {unknown} are not values of {column}; choose from {categories[:20]}'
+                             f'{" ..." if len(categories) > 20 else ""}')
+
+
+def style_range(key):
+    """Lowest and highest value of a numeric --start-style key, in convert()'s units: the size sliders' range for
+    sizes, 0 to 1 for opacities."""
+    return (MIN_POINT_SIZE, MAX_POINT_SIZE) if key in SIZE_KEYS else (0, 1)
+
+
+def check_start_style(start_style):
+    """Raise if --start-style has an unknown key, a size outside the viewer's slider range, an opacity outside 0 to
+    1, or a keep_colors that is not a bool. The written range check also rejects NaN (it is outside every range)."""
+    for key, value in start_style.items():
+        if key not in STYLE_KEYS:
+            raise ValueError(f'--start-style {key} is not a style key; choose from {list(STYLE_KEYS)}')
+        if key == KEEP_COLORS_KEY:
+            if not isinstance(value, bool):
+                raise ValueError(f'--start-style keep_colors must be True or False, not {value!r}')
+            continue
+        # bool is an int in Python, but True is no size
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f'--start-style {key} must be a number, not {value!r}')
+        low, high = style_range(key)
+        if not low <= value <= high:
+            raise ValueError(f'--start-style {key} {value} is outside {low} to {high}')
 
 
 def check_out_dir(out_dir):
@@ -538,9 +593,53 @@ def read_gene_sources(gene_sources, cells):
     return read
 
 
+def parse_start_style(items):
+    """--start-style's KEY=VALUE items as convert()'s start_style: keys with '-' or '_', sizes as multiples of the
+    default size, opacities in percent (divided by 100 here), keep-colors on or off. Raises, quoting the item as
+    typed, for anything else or a value out of range, so that the command line stops before reading data."""
+    style = {}
+    for item in items:
+        key, equals, text = item.partition('=')
+        if not equals:
+            raise ValueError(f'--start-style {item}: give KEY=VALUE, KEY one of {list(STYLE_KEYS)}')
+        key = key.replace('-', '_')
+        if key not in STYLE_KEYS:
+            raise ValueError(f'--start-style {item}: {key} is not a style key; choose from {list(STYLE_KEYS)}')
+        if key == KEEP_COLORS_KEY:
+            if text not in ON_OFF:
+                raise ValueError(f'--start-style {item}: give on or off')
+            style[key] = ON_OFF[text]
+            continue
+        try:
+            number = float(text)
+        except ValueError:
+            raise ValueError(f'--start-style {item}: {text} is not a number') from None
+        scale = PERCENT if key in OPACITY_KEYS else 1
+        low, high = (scale * bound for bound in style_range(key))
+        # Written as not (inside) so that nan fails too
+        if not low <= number <= high:
+            raise ValueError(f'--start-style {item}: give {low:g} to {high:g}')
+        style[key] = number / scale
+    return style
+
+
+def selected_values(items):
+    """--select's items (each a column then its values) as convert()'s selected; raise if a column has no value or
+    is given twice."""
+    selected = {}
+    for column, *values in items:
+        if not values:
+            raise ValueError(f'--select {column} needs at least one value')
+        if column in selected:
+            raise ValueError(f'--select {column} is given twice; list all its values in one --select')
+        selected[column] = values
+    return selected
+
+
 def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=None,
             axis_labels=DEFAULT_AXIS_LABELS, up=None, exclude=(), ends=None, roles=None, view=None, locked=(),
-            hierarchies=(), hierarchy_csvs=(), gene_sources=(), log_scaled=None, one_byte=()):
+            hierarchies=(), hierarchy_csvs=(), gene_sources=(), log_scaled=None, one_byte=(), selected=None,
+            start_style=None):
     """Write the dataset folder and return its manifest.
 
     `name` is shown in the viewer (default: the file name without extension); `color` and `filters` are the obs
@@ -557,9 +656,14 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
     already on a log scale to that scale's name (e.g. 'log2'), which the viewer then colors linearly and names in its
     legend; `one_byte` lists gene sources whose fractional values are stored in one byte per cell (254 steps per
     gene).
+    `selected` maps --filters columns to the category names ticked when the viewer opens; `start_style` gives some of
+    the side panel's starting values: shown_size and filtered_size (multiples of the default point size, 1/16 to 8),
+    shown_opacity and filtered_opacity (fractions, 0 to 1) and keep_colors (bool). The viewer's sliders take the
+    nearest step: 0.1 in log2 of the size, 0.01 in opacity.
     Every request is checked before anything is written.
     """
     up, ends, roles, log_scaled = up or {}, ends or {}, roles or {}, log_scaled or {}
+    selected, start_style = selected or {}, start_style or {}
     name = name or os.path.splitext(os.path.basename(h5ad_path))[0]
 
     # Check the request against the data
@@ -573,6 +677,8 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
     check_roles(embeddings, roles, up, ends, axis_labels)
     check_view(view, embedding, embeddings, ends, axis_labels)
     check_locked(locked, axis_labels)
+    check_selected(selected, filters, adata.obs)
+    check_start_style(start_style)
     check_out_dir(out_dir)
     hierarchy_entries = build_hierarchies(adata, columns, hierarchies, hierarchy_csvs)
     check_gene_source_names(gene_sources)
@@ -600,7 +706,10 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
         'n_cells': int(adata.n_obs),
         'axes': {'labels': list(axis_labels)},
         'defaults': {'embedding': embedding or default_embedding(embeddings), 'color': color,
-                     'filters': list(filters), 'view': view, 'locked': list(locked)},
+                     'filters': list(filters), 'view': view, 'locked': list(locked),
+                     'selected': {column: [str(v) for v in values] for column, values in selected.items()},
+                     'style': {key: value if key == KEEP_COLORS_KEY else float(value)
+                               for key, value in start_style.items()}},
         'embeddings': write_embeddings(adata, embeddings, up, ends, roles, axis_labels, out_dir),
         'fields': write_fields(adata, columns, out_dir),
         'gene_sources': sources,
@@ -661,7 +770,22 @@ def main():
                              'one byte per cell, 254 steps from 0 to each gene\'s top (a quarter of float32); values '
                              'must not be negative; no effect on whole counts of a source that covers every cell; '
                              'repeatable')
+    # Starting ticks and style of the side panel; 'clear' and the sliders work as usual afterwards
+    parser.add_argument('--select', nargs='+', action='append', default=[], metavar=('COLUMN', 'VALUE'),
+                        help='values of a --filters column ticked when the viewer opens, e.g. --select region '
+                             'A B C; repeatable, once per column')
+    parser.add_argument('--start-style', nargs='+', default=[], metavar='KEY=VALUE',
+                        help='starting Shown / Filtered out style: shown-size and filtered-size (multiples of the '
+                             'default point size, 1/16 to 8; the slider takes the nearest 0.1 step in log2), '
+                             'shown-opacity and filtered-opacity (percent, 0 to 100; the slider takes the nearest '
+                             'whole percent) and keep-colors (on or off), e.g. shown-size=1 filtered-size=0.5 '
+                             "filtered-opacity=10; keys left out keep the viewer's starting values")
     args = parser.parse_args()
+    try:
+        selected = selected_values(args.select)
+        start_style = parse_start_style(args.start_style)
+    except ValueError as error:
+        parser.error(str(error))
 
     up = {key: [float(x), float(y), float(z)] for key, x, y, z in args.up}
     # --ends gives six names per embedding: low and high end of x, then y, then z
@@ -672,7 +796,7 @@ def main():
                        ends=ends, roles=roles, view=args.view, locked=args.locked,
                        hierarchies=[tuple(pair) for pair in args.hierarchy], hierarchy_csvs=args.hierarchy_csv,
                        gene_sources=[tuple(pair) for pair in args.gene_source], log_scaled=dict(args.log_scaled),
-                       one_byte=args.one_byte)
+                       one_byte=args.one_byte, selected=selected, start_style=start_style)
     genes = ', '.join(f"{len(s['genes'])} {s['name']}" for s in manifest['gene_sources'])
     print(f"Wrote {args.out_dir}: {manifest['n_cells']:,} cells, {len(manifest['fields'])} obs columns, "
           f"genes: {genes}", flush=True)

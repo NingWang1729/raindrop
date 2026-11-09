@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from scipy import sparse
 
-from convert import convert, embedding_axis_labels
+from convert import convert, embedding_axis_labels, parse_start_style
 
 CONVERT_PY = os.path.join(os.path.dirname(__file__), '..', 'convert.py')
 
@@ -54,7 +54,7 @@ def test_manifest_and_arrays(tmp_path):
     assert json.load(open(f'{out}/manifest.json')) == manifest
     assert manifest['n_cells'] == 5
     assert manifest['defaults'] == {'embedding': 'spatial', 'color': 'Subclass', 'filters': ['section'], 'view': None,
-                                    'locked': []}
+                                    'locked': [], 'selected': {}, 'style': {}}
     assert manifest['hierarchies'] == []
 
     # Only 2D/3D embeddings are kept, with values intact
@@ -360,6 +360,109 @@ def test_command_line_anatomy(tmp_path):
     assert embeddings['X_ccf']['roles'] == ['AP', 'DV', 'LR'] and embeddings['X_ccf']['labels'] == ['AP', 'DV', 'LR']
     assert manifest['defaults']['view'] == 'left' and manifest['defaults']['locked'] == ['AP', 'LR']
     assert manifest['hierarchies'][0]['groups'] == ['X', 'Y', 'NA']
+
+
+def test_start_selection_and_style(tmp_path):
+    """--select and --start-style land in the manifest's defaults as given (sizes as multiples of the default
+    size, opacities as fractions); 'NA' (missing values) can be selected, and a style may set only some keys."""
+    adata, _ = make_adata()
+    style = {'shown_size': 1, 'shown_opacity': 1.0, 'filtered_size': 0.5, 'filtered_opacity': 0.1,
+             'keep_colors': True}
+    _, manifest = run(tmp_path, adata, filters=['section', 'Subclass'],
+                      selected={'section': ['s2'], 'Subclass': ['a', 'NA']}, start_style=style)
+    assert manifest['defaults']['selected'] == {'section': ['s2'], 'Subclass': ['a', 'NA']}
+    assert manifest['defaults']['style'] == style
+
+    (tmp_path / 'partial').mkdir()
+    _, manifest = run(tmp_path / 'partial', adata, start_style={'filtered_opacity': 0.25})
+    assert manifest['defaults']['style'] == {'filtered_opacity': 0.25}
+    assert manifest['defaults']['selected'] == {}
+
+
+@pytest.mark.parametrize('selected, message', [
+    ({'Subclass': ['a']}, 'Subclass is not a --filters column'),
+    ({'missing': ['a']}, 'missing is not a --filters column'),
+    ({'section': ['s3', 's1', 's4']}, r"--select section: \['s3', 's4'\] are not values of section"),
+    ({'section': []}, '--select section needs at least one value'),
+])
+def test_start_selection_errors(tmp_path, selected, message):
+    adata, _ = make_adata()
+    with pytest.raises(ValueError, match=message):
+        run(tmp_path, adata, selected=selected)
+    # Nothing is written when a check fails
+    assert not os.path.exists(tmp_path / 'out')
+
+
+def test_start_selection_needs_a_categorical_column(tmp_path):
+    """A numeric column's filter panel has bounds, not values to tick."""
+    adata, _ = make_adata()
+    with pytest.raises(ValueError, match='--select depth: depth is numeric'):
+        run(tmp_path, adata, filters=['depth'], selected={'depth': ['0.5']})
+
+
+@pytest.mark.parametrize('style, message', [
+    ({'size': 1}, r"--start-style size is not a style key; choose from \['shown_size'"),
+    ({'shown_size': 0}, r'shown_size 0 is outside 0.0625 to 8'),
+    ({'filtered_size': 9}, r'filtered_size 9 is outside 0.0625 to 8'),
+    ({'shown_opacity': -0.01}, r'shown_opacity -0.01 is outside 0 to 1'),
+    ({'filtered_opacity': 1.01}, r'filtered_opacity 1.01 is outside 0 to 1'),
+    ({'shown_size': float('nan')}, r'shown_size nan is outside'),
+    ({'keep_colors': 'on'}, 'keep_colors must be True or False'),
+    ({'shown_size': '1'}, "shown_size must be a number, not '1'"),
+    ({'shown_size': True}, 'shown_size must be a number, not True'),
+])
+def test_start_style_errors(tmp_path, style, message):
+    adata, _ = make_adata()
+    with pytest.raises(ValueError, match=message):
+        run(tmp_path, adata, start_style=style)
+    assert not os.path.exists(tmp_path / 'out')
+
+
+def test_parse_start_style():
+    """The command line's KEY=VALUE items: dashes or underscores in keys, sizes as given, opacities in percent
+    (as the side panel's boxes show them), keep-colors on or off."""
+    assert parse_start_style(['shown-size=1', 'shown-opacity=100', 'filtered_size=0.5', 'filtered-opacity=10',
+                              'keep-colors=off']) == {'shown_size': 1.0, 'shown_opacity': 1.0, 'filtered_size': 0.5,
+                                                      'filtered_opacity': 0.1, 'keep_colors': False}
+    assert parse_start_style([]) == {}
+    with pytest.raises(ValueError, match="--start-style shown-size: give KEY=VALUE"):
+        parse_start_style(['shown-size'])
+    with pytest.raises(ValueError, match="--start-style shown-size=big: big is not a number"):
+        parse_start_style(['shown-size=big'])
+    with pytest.raises(ValueError, match="--start-style keep-colors=maybe: give on or off"):
+        parse_start_style(['keep-colors=maybe'])
+    with pytest.raises(ValueError, match="--start-style size=1: size is not a style key"):
+        parse_start_style(['size=1'])
+    # Ranges in the units typed: percent for opacities
+    with pytest.raises(ValueError, match="--start-style shown-opacity=150: give 0 to 100"):
+        parse_start_style(['shown-opacity=150'])
+    with pytest.raises(ValueError, match="--start-style filtered-size=0: give 0.0625 to 8"):
+        parse_start_style(['filtered-size=0'])
+
+
+def test_command_line_start_options(tmp_path):
+    """End to end: --select (a column name with a space, repeatable) and --start-style as a user types them; a
+    column given twice is an error."""
+    adata, _ = make_adata()
+    adata.obs['brain part'] = pd.Categorical(['x', 'y', 'x', 'y', 'z'])
+    adata.write_h5ad(tmp_path / 'example.h5ad')
+    command = [sys.executable, CONVERT_PY, str(tmp_path / 'example.h5ad'), str(tmp_path / 'out'),
+               '--filters', 'section', 'brain part', '--select', 'brain part', 'x', 'z', '--select', 'section', 's1',
+               '--start-style', 'shown-size=2', 'filtered-opacity=10', 'keep-colors=off']
+    subprocess.run(command, capture_output=True, text=True, check=True)
+    defaults = json.load(open(tmp_path / 'out' / 'manifest.json'))['defaults']
+    assert defaults['selected'] == {'brain part': ['x', 'z'], 'section': ['s1']}
+    assert defaults['style'] == {'shown_size': 2.0, 'filtered_opacity': 0.1, 'keep_colors': False}
+
+    command[3] = str(tmp_path / 'out2')
+    result = subprocess.run(command + ['--select', 'section', 's2'], capture_output=True, text=True)
+    assert result.returncode != 0 and '--select section is given twice' in result.stderr
+    assert not os.path.exists(tmp_path / 'out2')
+    # A column without values, and an opacity in percent out of range, stop before any data is read
+    for extra, message in [(['--select', 'section'], '--select section needs at least one value'),
+                           (['--start-style', 'shown-opacity=150'], 'shown-opacity=150: give 0 to 100')]:
+        result = subprocess.run(command[:4] + extra, capture_output=True, text=True)
+        assert result.returncode != 0 and message in result.stderr
 
 
 def test_extra_gene_sources(tmp_path):

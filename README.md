@@ -60,6 +60,14 @@ python convert.py data.h5ad data/my_dataset --name "My dataset" \
   (500 genes of 100,000 cells: 50 MB instead of 200 MB). Values must not be negative; whole counts of a source that
   covers every cell are already stored exactly in two bytes, so the option has no effect on them (a source that misses
   cells is stored as float32, so its counts are rounded to the steps too). Repeatable.
+- `--select COLUMN VALUE ...` ticks values of a `--filters` column when the viewer opens (once per column,
+  repeatable), and `--start-style KEY=VALUE ...` sets the starting Shown / Filtered out style: `shown-size` and
+  `filtered-size` as multiples of the default point size (1/16 to 8; the slider takes the nearest 0.1 step in log2),
+  `shown-opacity` and `filtered-opacity` in percent (0 to 100; the slider takes the nearest whole percent),
+  `keep-colors` on or off; keys left out keep the viewer's own starting values. For example `--select region
+  A B C --start-style shown-size=1 shown-opacity=100 filtered-size=0.5 filtered-opacity=10` shows
+  regions A, B and C large and opaque inside a faint brain. Afterwards the panels work as usual: `clear` shows all
+  values (reload for the starting ticks).
 - See `python convert.py --help` and the top of `convert.py` for the folder layout.
 
 The repository's `data/` folder is ignored by git; datasets can live there or anywhere else the server can reach.
