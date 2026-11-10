@@ -20,6 +20,16 @@ export function svg(tag, attributes = {}, children = []) {
   return element;
 }
 
+// Enter in a number box (or Android's Done key, which sends Enter) also leaves it, so a phone's on-screen keyboard
+// closes and the picture shows. The box's own 'change' handler still applies the value, once: this runs before
+// Enter's default action, so leaving the box fires 'change' (if the value changed) and Enter then finds nothing left
+// to commit
+export function blurOnEnter(input) {
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') input.blur();
+  });
+}
+
 // A count with thousands separators, the same in every locale (e.g. 12,345)
 export function formatCount(n) {
   return n.toLocaleString('en-US');

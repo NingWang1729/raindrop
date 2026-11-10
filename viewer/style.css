@@ -215,3 +215,12 @@ body.compact #legend { width: clamp(220px, 22vw, 360px); }
   #sidebar { width: 100%; max-height: 45vh; border-right: none; border-bottom: 1px solid var(--border); }
   #legend, body.compact #legend { width: 100%; max-height: 30vh; border-left: none; border-top: 1px solid var(--border); }
 }
+
+/* Touch screens (phones and tablets): text fields and menus at 16 px, as iOS Safari zooms the page into a focused
+   field with smaller text (the same selectors as their earlier rules, 'font: inherit' and the legend's small sort
+   menu, so this one, later, wins); number boxes tall enough for a finger, and wide enough for '100' at that size */
+@media (pointer: coarse) {
+  select, input[type=search], input[type=number], #gene, select.sort { font-size: 16px; }
+  #cell-styles input[type=number], #rotation input[type=number] { min-height: 40px; }
+  #cell-styles col.box { width: 52px; }
+}
