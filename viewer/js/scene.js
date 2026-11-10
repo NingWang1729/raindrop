@@ -8,8 +8,9 @@
 //
 // Frames: data (the embedding's axes, data units); world = the data turned about its center by the data's
 // rotation (`model`); camera (three.js: x right, y up, looking down -z); screen = the tile in CSS px, x right
-// and y down. Angles are radians unless a name says degrees. The canvas is device px = CSS px *
-// devicePixelRatio; three.js's setSize/setViewport take CSS px, gl_PointSize is in device px.
+// and y down. Angles are radians unless a name says degrees. The canvas is device px = CSS px * the renderer's
+// pixel ratio (the screen's devicePixelRatio, at most MAX_PIXEL_RATIO); three.js's setSize/setViewport take CSS px,
+// gl_PointSize is in device px.
 //
 // Rotation turns the data itself about its center, never the camera, so one orientation drives both the
 // picture and the sliders. Left-dragging works like a turntable that can also tip over: left/right spins the
@@ -28,6 +29,9 @@ import { EXTENT_PER_UNIT_POINT_SIZE, framedDiameterPx } from './positions.js';
 import { dragDirection, knobTurn, recentMovement, wrapTurns } from './rotation.js';
 import { buildScreenGrid, makeProjection, nearestCell, projectShownCells } from './picking.js';
 
+// The canvas draws at most this many device px per CSS px: phones of pixel ratio 3 would fill 9 device px per CSS
+// px, 2.25 times the 4 at ratio 2, for little visible gain on a phone's screen
+const MAX_PIXEL_RATIO = 2;
 // White page behind the points
 const BACKGROUND_COLOR = 0xffffff;
 // Light grey edges of the axes box
@@ -118,7 +122,7 @@ export class SharedCanvas {
   constructor(host) {
     this.host = host;
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.renderer.setClearColor(BACKGROUND_COLOR);
     // Each view clears and draws only its own rectangle
     this.renderer.setScissorTest(true);
@@ -575,10 +579,10 @@ export class PointCloudView {
 
   // The shown cell to label at `pointer` (tile CSS px), or -1: the one nearest the camera within the pick radius
   // (picking.nearestCell). The radius is HOVER_RADIUS_PX, or the radius of a shown point at the target's distance if
-  // larger: its diameter in device px as in VERTEX_SHADER, / devicePixelRatio for CSS px, / 2. Cells nearer than the
-  // target are drawn larger than that, so their edges may not count. Filtered-out cells are skipped even when,
-  // opaque, they are drawn over shown ones. None while shown cells are not drawn (opacity 0) or before positions
-  // are set
+  // larger: its diameter in device px as in VERTEX_SHADER, / the renderer's pixel ratio for CSS px, / 2. Cells
+  // nearer than the target are drawn larger than that, so their edges may not count. Filtered-out cells are skipped
+  // even when, opaque, they are drawn over shown ones. None while shown cells are not drawn (opacity 0) or before
+  // positions are set
   cellAt(pointer) {
     if (!this.shown.visible || !this.geometry.getAttribute('state')) return -1;
     const distance = this.camera.position.distanceTo(this.controls.target);
