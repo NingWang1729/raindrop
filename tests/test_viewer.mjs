@@ -30,14 +30,42 @@ const tests = {
     assert.equal(filters.countKept(others), 2);
   },
 
-  'reversing a keep mask takes its complement within the base mask'() {
-    // The last cell has no position (not in base): it stays out of the reversed mask
-    const base = Uint8Array.from([1, 1, 1, 0]);
-    const keep = Uint8Array.from([1, 0, 0, 0]);
-    assert.deepEqual([...filters.reverseKeep(base, keep)], [0, 1, 1, 0]);
-    // Neither input changes
-    assert.deepEqual([...base], [1, 1, 1, 0]);
-    assert.deepEqual([...keep], [1, 0, 0, 0]);
+  'a reversed category filter keeps the values not ticked, and combines with AND'() {
+    // Cells in regions 0 and 1, of subclasses 0, 1 and 2; the last cell has no position
+    const base = Uint8Array.from([1, 1, 1, 1, 1, 0]);
+    const region = { kind: 'category', values: Uint8Array.from([0, 0, 0, 1, 1, 0]), allowed: null, reversed: false };
+    const subclass = { kind: 'category', values: Uint8Array.from([0, 1, 2, 0, 1, 0]), allowed: null, reversed: true };
+
+    // Reversed with nothing ticked restricts nothing
+    assert.equal(filters.isActive(subclass), false);
+    assert.deepEqual([...filters.computeKeep(base, [subclass])], [1, 1, 1, 1, 1, 0]);
+
+    // Region 0 ticked, subclass 0 ticked and reversed: region 0 cells except subclass 0
+    filters.setCategories(region, 2, [0], true);
+    filters.setCategories(subclass, 3, [0], true);
+    assert.deepEqual([...filters.computeKeep(base, [region, subclass])], [0, 1, 1, 0, 0, 0]);
+    // The ticks are not rewritten; unreversed, the same ticks show region 0's subclass 0 cells again
+    assert.deepEqual([...subclass.allowed], [1, 0, 0]);
+    subclass.reversed = false;
+    assert.deepEqual([...filters.computeKeep(base, [region, subclass])], [1, 0, 0, 0, 0, 0]);
+
+    // A panel's counts skip its own filter, reversed or not
+    subclass.reversed = true;
+    const others = filters.computeKeep(base, [region, subclass], subclass);
+    assert.deepEqual([...filters.countCategories(subclass.values, 3, others)], [1, 1, 1]);
+  },
+
+  'a reversed range keeps the cells outside it, NaN included'() {
+    const base = Uint8Array.from([1, 1, 1, 1, 1]);
+    const depth = { kind: 'range', values: Float32Array.from([1, 2, 3, 4, NaN]), min: null, max: null, reversed: true };
+    // No bounds: no effect, reversed or not
+    assert.deepEqual([...filters.computeKeep(base, [depth])], [1, 1, 1, 1, 1]);
+    // The closed range [2, 3] reversed keeps 1, 4 and the NaN cell (which fails the range)
+    depth.min = 2;
+    depth.max = 3;
+    assert.deepEqual([...filters.computeKeep(base, [depth])], [1, 0, 0, 1, 1]);
+    depth.reversed = false;
+    assert.deepEqual([...filters.computeKeep(base, [depth])], [0, 1, 1, 0, 0]);
   },
 
   'setting several categories at once; none ticked turns the filter off'() {
