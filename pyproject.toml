@@ -13,16 +13,17 @@ license-files = ["LICENSE"]
 dependencies = ["anndata>=0.10", "numpy", "pandas", "platformdirs", "scipy"]
 
 [project.optional-dependencies]
-test = ["pytest"]
+# The packaging tests build a wheel with setuptools
+test = ["pytest", "setuptools>=77"]
 
 [project.scripts]
 raindrop = "raindrop.cli:main"
 
-# The converter is a single module and the raindrop command a small package; tests/ and data/ are not Python packages.
+# The converter (raindrop.convert) and the raindrop command are one small package; tests/ and data/ are not Python
+# packages, and the clone's convert.py only runs raindrop.convert, so it is not installed.
 # The viewer stays in viewer/ at the repository root; the raindrop.viewer entries copy it into the package as
 # raindrop/viewer, for raindrop view (a new folder in viewer/ needs its own entry in both lists)
 [tool.setuptools]
-py-modules = ["convert"]
 packages = ["raindrop", "raindrop.viewer", "raindrop.viewer.js", "raindrop.viewer.vendor"]
 
 [tool.setuptools.package-dir]

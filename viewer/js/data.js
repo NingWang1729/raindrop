@@ -23,7 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // byte order, which is little-endian on all common platforms (x86, ARM)
 const ARRAY_TYPES = { uint8: Uint8Array, uint16: Uint16Array, float32: Float32Array };
 
-// One-byte gene code meaning "no value"; codes 0..254 are values (convert.py ONE_BYTE_MISSING, ONE_BYTE_TOP)
+// One-byte gene code meaning "no value"; codes 0..254 are values (raindrop/convert.py ONE_BYTE_MISSING, ONE_BYTE_TOP)
 const ONE_BYTE_MISSING = 255;
 
 async function fetchArray(url, dtype) {
