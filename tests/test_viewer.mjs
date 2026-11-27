@@ -1,4 +1,5 @@
-// Tests for the viewer's pure-logic modules (data, positions, colors, filters, hierarchy, rotation, names, picking).
+// Tests for the viewer's pure-logic modules (data, positions, colors, filters, hierarchy, rotation, names, picking,
+// embed URL parameters).
 // Run with: node tests/test_viewer.mjs
 import assert from 'node:assert/strict';
 import * as filters from '../viewer/js/filters.js';
@@ -8,6 +9,7 @@ import { bounds, faceView, framedDiameterPx, niceTicks, readsHighToLow, tickTarg
 import { groupState, treeRows } from '../viewer/js/hierarchy.js';
 import { axisLabels, axisTitle, capitalize, cellValueText, colorLabel, endLabel, widgetEndLabel } from '../viewer/js/names.js';
 import { buildScreenGrid, makeProjection, nearestCell, projectShownCells } from '../viewer/js/picking.js';
+import { canonicalOption, isEmbedOn, parseControlsMode } from '../viewer/js/embed.js';
 import { anglesToMatrix, clampDegrees, continuousAngles, dragDirection, faceRotation, knobTurn, openingTurnAxis, recentMovement, wrapTurns } from '../viewer/js/rotation.js';
 
 const tests = {
@@ -489,6 +491,30 @@ const tests = {
     assert.equal(cellValueText({ kind: 'gene', source: 'measured', name: 'Pcp4' }, null, NaN, sources), 'Pcp4: no value');
     // A source on its own scale (--log-scaled) names it, as the value is not a count
     assert.equal(cellValueText({ kind: 'gene', source: 'smoothed', name: 'Pcp4' }, null, 3.14159, sources), 'Pcp4 (log2): 3.14');
+  },
+  'embed= turns embed mode on with 1 or true and leaves it off with 0, false or no embed=, in any case'() {
+    for (const value of ['1', 'true', 'TRUE', 'True']) assert.equal(isEmbedOn(value), true, value);
+    for (const value of [null, '0', 'false', 'FALSE']) assert.equal(isEmbedOn(value), false, value);
+    // Any other value, an empty one included, is refused with the value as typed and the allowed ones
+    for (const value of ['yes', 'Yes', '', '2', 'on', ' 1']) {
+      assert.throws(() => isEmbedOn(value), { message: `Unknown embed=${value}: use embed=1, embed=true, embed=0 or embed=false.` });
+    }
+  },
+
+  'controls= is compact or full in any case, compact when absent, and refuses other values'() {
+    assert.equal(parseControlsMode(null), 'compact');
+    assert.equal(parseControlsMode('compact'), 'compact');
+    assert.equal(parseControlsMode('COMPACT'), 'compact');
+    assert.equal(parseControlsMode('Full'), 'full');
+    for (const value of ['big', '', 'fulll']) {
+      assert.throws(() => parseControlsMode(value), { message: `Unknown controls=${value}: use controls=compact or controls=full.` });
+    }
+  },
+
+  'an option is lower-cased if allowed, and otherwise refused naming every allowed value'() {
+    assert.equal(canonicalOption('mode', 'B', ['a', 'b']), 'b');
+    assert.throws(() => canonicalOption('mode', 'C', ['a']), { message: 'Unknown mode=C: use mode=a.' });
+    assert.throws(() => canonicalOption('mode', 'C', ['a', 'b', 'c2']), { message: 'Unknown mode=C: use mode=a, mode=b or mode=c2.' });
   },
 };
 

@@ -9,7 +9,7 @@ import { buildAxisLabels, buildAxisWidget, updateAxisLabels, updateAxisWidget, W
 import { Categories } from './categories.js';
 import { Coloring } from './coloring.js';
 import { toHex } from './colors.js';
-import { EMBED_CONTROLS, showEmbedBar } from './embed.js';
+import { CONTROLS_IGNORED, isEmbedOn, parseControlsMode, showEmbedBar } from './embed.js';
 import { Legend } from './legend.js';
 import { cellValueText } from './names.js';
 import { FilterPanels } from './panels.js';
@@ -494,19 +494,25 @@ class App {
   }
 }
 
-// Read the URL parameters: stop on an unknown controls= value, show the embed bar for embed=1 (warn if controls= is
-// given without it), then open the dataset named by ?data=, or say how to; errors are shown in the status line and
-// rethrown for the console
+// Read the URL parameters: stop on an unknown embed= value, or in embed mode an unknown controls= value; show the
+// embed bar in embed mode (warn if controls= is given without it), then open the dataset named by ?data=, or say how
+// to; errors are shown in the status line and rethrown for the console
 async function main() {
   const params = new URLSearchParams(window.location.search);
   const url = params.get('data');
-  const controlsMode = params.get('controls') ?? 'compact';
-  if (!EMBED_CONTROLS.includes(controlsMode)) {
-    document.getElementById('status').textContent = `Unknown controls=${controlsMode}: use controls=compact or controls=full.`;
+  let isEmbedded, controlsMode;
+  try {
+    isEmbedded = isEmbedOn(params.get('embed'));
+    if (isEmbedded) controlsMode = parseControlsMode(params.get('controls'));
+  } catch (error) {
+    document.getElementById('status').textContent = error.message;
     return;
   }
-  if (params.get('embed') === '1') showEmbedBar(controlsMode);
-  else if (params.has('controls')) console.warn('controls= has no effect without embed=1');
+  if (isEmbedded) showEmbedBar(controlsMode);
+  // controls= has no effect without embed mode, whatever its value: warn in the console, and in the status line once
+  // the dataset has opened (opening clears the status line)
+  const controlsIgnored = !isEmbedded && params.has('controls');
+  if (controlsIgnored) console.warn(CONTROLS_IGNORED);
   if (!url) {
     document.getElementById('status').textContent = 'Add ?data=<dataset folder URL> to the address to open a dataset.';
     return;
@@ -514,6 +520,7 @@ async function main() {
   try {
     const app = new App(await Dataset.load(url));
     await app.init();
+    if (controlsIgnored) app.setStatus(CONTROLS_IGNORED);
   } catch (error) {
     document.getElementById('status').textContent = `Error: ${error.message}`;
     throw error;
