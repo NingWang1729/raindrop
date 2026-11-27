@@ -1,6 +1,7 @@
 """
 Tests of how raindrop is packaged: the converter lives in the package, the clone's convert.py only runs it, the
-wheel installs no top-level convert module, and the package's PyPI name and page are right.
+wheel installs no top-level convert module, the package's PyPI name and page are right, and the release files name
+the version.
 
 raindrop: a browser viewer for single-cell and spatial data
 Copyright (C) 2026 Ning Wang
@@ -29,6 +30,7 @@ import sys
 import zipfile
 from pathlib import Path
 
+import raindrop
 from test_convert import CONVERT_PY, make_adata
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -40,6 +42,9 @@ SOURCE_FOLDERS = ['raindrop', 'viewer']
 # ([name]: target) and HTML links (href="target")
 LINK_TARGETS = [re.compile(r'\]\(\s*<?([^)\s>]+)'), re.compile(r'^\s*\[[^\]]+\]:\s*<?([^\s>]+)', re.MULTILINE),
                 re.compile(r'href="([^"]+)"')]
+# A release's heading in CHANGELOG.md (## [0.1.1] - 2026-11-27) and the version line of CITATION.cff
+CHANGELOG_RELEASE = re.compile(r'^## \[(\d[^\]]*)\]', re.MULTILINE)
+CITATION_VERSION = re.compile(r'^version: (\S+)$', re.MULTILINE)
 
 
 def test_converter_is_in_the_package():
@@ -109,6 +114,7 @@ def test_wheel_metadata_names_the_pypi_package(tmp_path):
     metadata = email.parser.Parser().parsestr(wheel.read(f'{dist_info}/METADATA').decode())
     # Names are compared as pip does (PEP 503: case, '-', '_' and '.' alike)
     assert re.sub(r'[-_.]+', '-', metadata['Name']).lower() == 'raindrop-viewer'
+    assert metadata['Version'] == raindrop.__version__
     assert metadata['Description-Content-Type'] == 'text/markdown'
     assert '# Raindrop' in metadata.get_payload()
     assert not [c for c in metadata.get_all('Classifier', []) if c.startswith('License ::')]
@@ -124,3 +130,16 @@ def test_readme_links_work_on_pypi():
     targets = [target for pattern in LINK_TARGETS for target in pattern.findall(readme)]
     assert targets
     assert [target for target in targets if not target.startswith('https://')] == []
+
+
+def test_version():
+    # Raised with each release, together with CHANGELOG.md and CITATION.cff (checked below)
+    assert raindrop.__version__ == '0.1.1'
+
+
+def test_release_files_name_the_version():
+    """The newest release in CHANGELOG.md and the version in CITATION.cff are the package's version."""
+    changelog = Path(ROOT, 'CHANGELOG.md').read_text(encoding='utf-8')
+    assert CHANGELOG_RELEASE.findall(changelog)[0] == raindrop.__version__
+    citation = Path(ROOT, 'CITATION.cff').read_text(encoding='utf-8')
+    assert CITATION_VERSION.findall(citation) == [raindrop.__version__]

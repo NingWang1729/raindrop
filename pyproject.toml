@@ -37,6 +37,7 @@ classifiers = [
 Homepage = "https://github.com/NingWang1729/raindrop"
 Repository = "https://github.com/NingWang1729/raindrop"
 Issues = "https://github.com/NingWang1729/raindrop/issues"
+Changelog = "https://github.com/NingWang1729/raindrop/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 # The packaging tests build a wheel with setuptools
