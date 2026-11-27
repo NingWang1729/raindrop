@@ -302,13 +302,69 @@ def test_conflicting_colors_warn(tmp_path):
     assert manifest['fields'][0]['colors'] == [None] * 4
 
 
-def test_too_many_categories(tmp_path):
+def categorical_cells(n_named, cells):
+    """A categorical column of `cells` with categories c0 .. c<n_named - 1>. Unused categories count too, so a few
+    cells carry many categories; a None cell adds the 'NA' category."""
+    return pd.Categorical(cells, categories=[f'c{i}' for i in range(n_named)])
+
+
+@pytest.mark.parametrize('n_named, cells, codes', [
+    # 256 named categories: the last one has code 255
+    (256, ['c0', 'c1', 'c254', 'c255', 'c255'], [0, 1, 254, 255, 255]),
+    # 255 named categories and the 'NA' category for the missing value, code 255
+    (255, ['c0', 'c1', 'c254', None, None], [0, 1, 254, 255, 255]),
+])
+def test_256_categories_fit_one_byte(tmp_path, n_named, cells, codes):
+    # Regression: 256 categories (codes 0-255) were stored as uint16, as if code 255 did not fit a byte
     adata, _ = make_adata()
-    # Unused categories count too, so five cells can carry 65540 categories
-    names = [f'c{i}' for i in range(65540)]
-    adata.obs['cell'] = pd.Categorical(names[:5], categories=names)
-    with pytest.raises(ValueError, match='obs column cell has 65540 categories'):
+    adata.obs['cell'] = categorical_cells(n_named, cells)
+    out, manifest = run(tmp_path, adata)
+    cell = next(f for f in manifest['fields'] if f['name'] == 'cell')
+    assert cell['dtype'] == 'uint8'
+    assert len(cell['categories']) == 256
+    np.testing.assert_array_equal(read(out, cell, 'uint8'), codes)
+
+
+def test_257_categories_need_two_bytes(tmp_path):
+    # Coverage: one category more than a byte holds
+    adata, _ = make_adata()
+    adata.obs['cell'] = categorical_cells(257, ['c0', 'c255', 'c256', 'c256', 'c1'])
+    out, manifest = run(tmp_path, adata)
+    cell = next(f for f in manifest['fields'] if f['name'] == 'cell')
+    assert cell['dtype'] == 'uint16'
+    np.testing.assert_array_equal(read(out, cell, 'uint16'), [0, 255, 256, 256, 1])
+
+
+def test_65536_categories_are_accepted(tmp_path):
+    # Regression: 65536 categories (codes 0-65535) were refused, as if code 65535 did not fit two bytes
+    adata, _ = make_adata()
+    adata.obs['cell'] = categorical_cells(65536, ['c0', 'c65535', 'c1', 'c65535', 'c2'])
+    out, manifest = run(tmp_path, adata)
+    cell = next(f for f in manifest['fields'] if f['name'] == 'cell')
+    assert cell['dtype'] == 'uint16'
+    np.testing.assert_array_equal(read(out, cell, 'uint16'), [0, 65535, 1, 65535, 2])
+
+
+@pytest.mark.parametrize('n_named, cells', [
+    (65537, ['c0', 'c1', 'c2', 'c3', 'c4']),
+    # The 'NA' category of the missing value is the 65537th
+    (65536, ['c0', 'c1', None, 'c3', 'c4']),
+])
+def test_too_many_categories(tmp_path, n_named, cells):
+    # Regression: the error came after genes and embeddings were written (leaving a partial output folder) and did not
+    # name --exclude
+    adata, _ = make_adata()
+    adata.obs['cell'] = categorical_cells(n_named, cells)
+
+    # Refused before anything is written, naming the fix
+    message = 'obs column cell has 65537 categories; at most 65536 are supported; leave it out with --exclude cell'
+    with pytest.raises(ValueError, match=message):
         run(tmp_path, adata)
+    assert not os.path.exists(tmp_path / 'out')
+
+    # The fix it names works
+    _, manifest = run(tmp_path, adata, exclude=['cell'])
+    assert 'cell' not in [f['name'] for f in manifest['fields']]
 
 
 def test_errors(tmp_path):
