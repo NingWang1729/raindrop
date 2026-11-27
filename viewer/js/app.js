@@ -148,7 +148,9 @@ class App {
     // Panels for convert.py --filters, with the values of --select ticked
     for (const name of manifest.defaults.filters) await this.panels.addFilter(name);
     await this.selectStartValues();
-    // Color by convert.py --color, else the first categorical column
+    // Color by convert.py --color, else the first categorical column, unless a color was picked for the view while the
+    // dataset opened: the user's pick wins, even if it is still loading or failed (picking it again retries)
+    if (view.loads.color > 0) return;
     const firstCategory = manifest.fields.find((f) => f.kind === 'category');
     await this.coloring.setColor(view, { kind: 'field', name: manifest.defaults.color ?? firstCategory?.name });
   }
