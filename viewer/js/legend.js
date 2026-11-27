@@ -125,7 +125,7 @@ export class Legend {
 
   // Reverse the selected view's colored column's filter, adding it (nothing ticked, so no effect yet) if needed. The
   // toggle is disabled while the filter is added (its values load asynchronously), so a quick second press cannot
-  // add the column twice
+  // reverse it back before the first has applied
   async reverseFromLegend() {
     this.legendReverse.disabled = true;
     try {

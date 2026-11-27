@@ -341,8 +341,8 @@ class App {
 
   // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels, a
   // compact legend, the axis widget and the link button), its scene, and what it shows (embedding, colors), filled
-  // in by setEmbedding and setColor. loads counts the embedding and color requests made for it, so that only the
-  // newest of each kind draws
+  // in by setEmbedding and setColor. loads counts the embedding, color and add-filter menu requests made for it, so
+  // that only the newest of each kind draws (or adds)
   createView() {
     const axisLabelsElement = el('div', { className: 'axis-labels' });
     const tileLegend = el('div', { className: 'tile-legend' });
@@ -358,7 +358,7 @@ class App {
 
     const view = {
       tile, axisLabelsElement, tileLegend, widgetElement, hoverLabel, linkButton, color: null, linked: true, settings: this.group,
-      loads: { embedding: 0, color: 0 },
+      loads: { embedding: 0, color: 0, filter: 0 },
     };
     linkButton.addEventListener('click', () => this.grid.toggleLink(view));
     view.scene = new PointCloudView(tile, this.canvas);
