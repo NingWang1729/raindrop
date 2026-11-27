@@ -210,5 +210,17 @@ uv venv .venv && uv pip install --python .venv/bin/python -e '.[test]'
 node tests/test_viewer.mjs                        # viewer filtering, color and position logic (Node.js)
 ```
 
-three.js is vendored in `viewer/vendor/` (MIT license, see `THREE_LICENSE`), so the viewer has no build step and no
-CDN dependency.
+three.js is vendored in `viewer/vendor/` (see Third-party code below), so the viewer has no build step and no CDN
+dependency.
+
+## License
+
+Raindrop is free software, licensed under the GNU Lesser General Public License, version 3 or (at your option) any
+later version (LGPL-3.0-or-later). The LGPL builds on the GNU General Public License, version 3; [LICENSE](LICENSE)
+holds both texts.
+
+## Third-party code
+
+`viewer/vendor/` holds three.js r160 (`three.module.min.js`) and its TrackballControls (`TrackballControls.js`, from
+the three.js repository's `examples/jsm/controls/`), both unmodified. three.js is Copyright © 2010-2023 three.js
+authors, under the MIT License; the full notice is in `viewer/vendor/THREE_LICENSE`.

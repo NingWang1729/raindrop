@@ -1,3 +1,21 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // Embed mode (?embed=1 or ?embed=true), for a widget in another page's iframe: a bar over the view's top left with a
 // toggle between compact controls (side panel hidden; the cell count, color menu, gene box and reset button in the
 // bar) and the full side panel, and a full screen button. ?controls= (compact by default) sets the controls it opens
