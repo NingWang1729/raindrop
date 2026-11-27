@@ -592,6 +592,17 @@ def test_command_line_start_options(tmp_path):
         assert result.returncode != 0 and message in result.stderr
 
 
+def test_command_line_up_needs_numbers(tmp_path):
+    """A non-number in --up stops with a usage error naming --up (it used to end in a traceback), writing nothing."""
+    adata, _ = make_adata()
+    adata.write_h5ad(tmp_path / 'example.h5ad')
+    result = subprocess.run([sys.executable, CONVERT_PY, str(tmp_path / 'example.h5ad'), str(tmp_path / 'out'),
+                             '--up', 'spatial', '0', 'x', '0'], capture_output=True, text=True)
+    assert result.returncode == 2
+    assert '--up spatial 0 x 0: give three numbers, e.g. --up spatial 0 -1 0' in result.stderr
+    assert not os.path.exists(tmp_path / 'out')
+
+
 def test_extra_gene_sources(tmp_path):
     adata, _ = make_adata()
     # Imputed genes for cells 3, 0 and 1 (in that order; cells 2 and 4 are missing), and counts for every cell

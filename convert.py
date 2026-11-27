@@ -754,10 +754,17 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
     return manifest
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+def add_arguments(parser):
+    """Add the converter's command-line arguments to an argparse parser: the input file, the output folder and the
+    options."""
     parser.add_argument('h5ad', help='input AnnData file')
     parser.add_argument('out_dir', help='dataset folder to create (must not exist)')
+    add_options(parser)
+
+
+def add_options(parser):
+    """Add the converter's options (every argument but the input file and the output folder) to an argparse
+    parser."""
     parser.add_argument('--name', help='dataset name shown in the viewer (default: the file name)')
     parser.add_argument('--color', help='obs column to color by when the viewer opens')
     parser.add_argument('--filters', nargs='*', default=[],
@@ -814,26 +821,52 @@ def main():
                              'shown-opacity and filtered-opacity (percent, 0 to 100; the slider takes the nearest '
                              'whole percent) and keep-colors (on or off), e.g. shown-size=1 filtered-size=0.5 '
                              "filtered-opacity=10; keys left out keep the viewer's starting values")
-    args = parser.parse_args()
-    try:
-        selected = selected_values(args.select)
-        start_style = parse_start_style(args.start_style)
-    except ValueError as error:
-        parser.error(str(error))
 
-    up = {key: [float(x), float(y), float(z)] for key, x, y, z in args.up}
+
+def up_direction(key, x, y, z):
+    """One --up direction as numbers; raises ValueError naming --up if a value is not a number."""
+    try:
+        return [float(x), float(y), float(z)]
+    except ValueError:
+        raise ValueError(f'--up {key} {x} {y} {z}: give three numbers, e.g. --up {key} 0 -1 0') from None
+
+
+def convert_kwargs(args):
+    """convert()'s keyword arguments from parsed options; raises ValueError for a bad --up, --select or
+    --start-style."""
+    up = {key: up_direction(key, x, y, z) for key, x, y, z in args.up}
     # --ends gives six names per embedding: low and high end of x, then y, then z
     ends = {key: [names[0:2], names[2:4], names[4:6]] for key, *names in args.ends}
     roles = {key: [role.upper() for role in given] for key, *given in args.roles}
-    manifest = convert(args.h5ad, args.out_dir, name=args.name, color=args.color, filters=args.filters,
-                       embedding=args.embedding, axis_labels=args.axis_labels, up=up, exclude=args.exclude,
-                       ends=ends, roles=roles, view=args.view, locked=args.locked,
-                       hierarchies=[tuple(pair) for pair in args.hierarchy], hierarchy_csvs=args.hierarchy_csv,
-                       gene_sources=[tuple(pair) for pair in args.gene_source], log_scaled=dict(args.log_scaled),
-                       one_byte=args.one_byte, selected=selected, start_style=start_style)
+    return dict(name=args.name, color=args.color, filters=args.filters, embedding=args.embedding,
+                axis_labels=args.axis_labels, up=up, exclude=args.exclude, ends=ends, roles=roles, view=args.view,
+                locked=args.locked, hierarchies=[tuple(pair) for pair in args.hierarchy],
+                hierarchy_csvs=args.hierarchy_csv, gene_sources=[tuple(pair) for pair in args.gene_source],
+                log_scaled=dict(args.log_scaled), one_byte=args.one_byte, selected=selected_values(args.select),
+                start_style=parse_start_style(args.start_style))
+
+
+def describe(manifest):
+    """One line on what a dataset folder holds: cells, obs columns and genes per source."""
     genes = ', '.join(f"{len(s['genes'])} {s['name']}" for s in manifest['gene_sources'])
-    print(f"Wrote {args.out_dir}: {manifest['n_cells']:,} cells, {len(manifest['fields'])} obs columns, "
-          f"genes: {genes}", flush=True)
+    return f"{manifest['n_cells']:,} cells, {len(manifest['fields'])} obs columns, genes: {genes}"
+
+
+def run(args, parser):
+    """Convert as the command line asks (arguments added by add_arguments), stopping through parser.error on a bad
+    option value."""
+    try:
+        kwargs = convert_kwargs(args)
+    except ValueError as error:
+        parser.error(str(error))
+    manifest = convert(args.h5ad, args.out_dir, **kwargs)
+    print(f'Wrote {args.out_dir}: {describe(manifest)}', flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    add_arguments(parser)
+    run(parser.parse_args(), parser)
 
 
 if __name__ == '__main__':
