@@ -9,6 +9,16 @@ authors:
     orcid: "https://orcid.org/0000-0003-3073-7911"
 license: LGPL-3.0-or-later
 repository-code: "https://github.com/NingWang1729/raindrop"
+# Each release is archived on Zenodo: doi is the concept DOI, which stays the same for every version and resolves to the
+# latest; the version DOI below changes with each release
+doi: 10.5281/zenodo.24604862
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.24604862
+    description: "All versions of Raindrop (resolves to the latest)"
+  - type: doi
+    value: 10.5281/zenodo.24604863
+    description: "Raindrop 0.1.1"
 version: 0.1.1
 date-released: "2026-11-27"
 keywords:
