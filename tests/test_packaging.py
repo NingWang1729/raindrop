@@ -210,3 +210,17 @@ def test_sdist_runs_its_own_tests(tmp_path):
                             '--basetemp', str(tmp_path / 'inner'), 'tests/test_cli.py', 'tests/test_packaging.py'],
                            cwd=tmp_path / 'unpacked' / top, capture_output=True, text=True)
     assert tests.returncode == 0, tests.stdout[-3000:]
+
+
+def test_license_metadata_declares_three_js(tmp_path):
+    """The wheel and the sdist declare both licenses (Raindrop's LGPL, three.js's MIT) and the wheel carries both
+    texts."""
+    with zipfile.ZipFile(build_wheel(tmp_path)) as wheel:
+        metadata = read_metadata(wheel)
+        licenses = [f'{dist_info(wheel)}/licenses/{name}' for name in ('LICENSE', 'viewer/vendor/THREE_LICENSE')]
+        assert set(licenses) <= set(wheel.namelist())
+    assert metadata['License-Expression'] == 'LGPL-3.0-or-later AND MIT'
+    with tarfile.open(build_sdist(tmp_path)) as sdist:
+        pkg_info = next(name for name in sdist.getnames() if name.count('/') == 1 and name.endswith('/PKG-INFO'))
+        sdist_metadata = email.parser.Parser().parsestr(sdist.extractfile(pkg_info).read().decode())
+    assert sdist_metadata['License-Expression'] == 'LGPL-3.0-or-later AND MIT'

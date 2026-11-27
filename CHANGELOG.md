@@ -14,6 +14,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - The converter is now part of the package, as `raindrop.convert`, and an install no longer adds a top-level
   `convert` module: code that did `import convert` now does `from raindrop import convert`. In a clone,
   `python convert.py ...` works as before, with the same options and help.
+- The package's license metadata names three.js's MIT license (for the files in `viewer/vendor/`) next to
+  Raindrop's LGPL.
 
 ## [0.1.0] - 2026-11-27
 
