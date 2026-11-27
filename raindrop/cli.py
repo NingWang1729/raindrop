@@ -24,8 +24,7 @@ import sys
 import warnings
 from pathlib import Path
 
-import convert
-from raindrop import cache, serve
+from raindrop import cache, convert, serve
 
 VIEW_DESCRIPTION = f"""Show an .h5ad file in the browser: convert it (or reuse an earlier conversion of the same file
 with the same options), serve the viewer and the dataset at 127.0.0.1, and open the browser there. Ctrl-C stops.

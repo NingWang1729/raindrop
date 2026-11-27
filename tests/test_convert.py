@@ -1,5 +1,5 @@
 """
-Tests for convert.py: build a tiny AnnData, convert it, and read the files back.
+Tests for the converter (raindrop/convert.py): build a tiny AnnData, convert it, and read the files back.
 
 raindrop: a browser viewer for single-cell and spatial data
 Copyright (C) 2026 Ning Wang
@@ -28,8 +28,9 @@ import pandas as pd
 import pytest
 from scipy import sparse
 
-from convert import convert, embedding_axis_labels, parse_start_style
+from raindrop.convert import convert, embedding_axis_labels, parse_start_style
 
+# The clone's convert.py, which runs the packaged converter; the command-line tests run it as users do
 CONVERT_PY = os.path.join(os.path.dirname(__file__), '..', 'convert.py')
 
 

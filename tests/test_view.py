@@ -28,8 +28,7 @@ import webbrowser
 
 import pytest
 
-import convert
-from raindrop import cli, serve
+from raindrop import cli, convert, serve
 from test_convert import make_adata
 
 # Environment variables that decide the cache folder and whether a browser can open; each test sets its own
