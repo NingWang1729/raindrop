@@ -17,13 +17,17 @@ GNU Lesser General Public License for more details.
 You should have received a copy of the GNU Lesser General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import configparser
+import email.parser
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import zipfile
 
+import raindrop
 from test_convert import CONVERT_PY, make_adata
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -93,3 +97,26 @@ def test_wheel_has_the_package_and_no_top_level_convert(tmp_path):
                  'raindrop/viewer/vendor/THREE_LICENSE'):
         assert name in names, name
     assert any(name.endswith('.dist-info/licenses/LICENSE') for name in names)
+
+
+def dist_info(wheel):
+    """The .dist-info folder of a wheel (a ZipFile)."""
+    return next(name for name in wheel.namelist() if name.endswith('.dist-info/METADATA')).rsplit('/', 1)[0]
+
+
+def read_metadata(wheel):
+    """The METADATA of a wheel (a ZipFile) as an email message."""
+    return email.parser.Parser().parsestr(wheel.read(f'{dist_info(wheel)}/METADATA').decode())
+
+
+def test_wheel_installs_as_raindrop_viewer(tmp_path):
+    """pip installs the wheel as raindrop-viewer (raindrop is another project's name on PyPI), with the raindrop
+    command."""
+    with zipfile.ZipFile(build_wheel(tmp_path)) as wheel:
+        metadata = read_metadata(wheel)
+        entry_points = configparser.ConfigParser()
+        entry_points.read_string(wheel.read(f'{dist_info(wheel)}/entry_points.txt').decode())
+    # Names are compared as pip does (PEP 503: case, '-', '_' and '.' alike)
+    assert re.sub(r'[-_.]+', '-', metadata['Name']).lower() == 'raindrop-viewer'
+    assert metadata['Version'] == raindrop.__version__
+    assert entry_points['console_scripts']['raindrop'] == 'raindrop.cli:main'

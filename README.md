@@ -12,7 +12,16 @@ host can serve it, and any page can embed it.
 
 ## Quick start
 
-Install Raindrop (Python 3.10 or later) from GitHub:
+Install Raindrop (Python 3.10 or later) from PyPI, where it is called `raindrop-viewer`; the command it installs is
+`raindrop`. If you installed Raindrop 0.1.0 (from GitHub or a clone), uninstall it first with
+`python -m pip uninstall raindrop`: it was called `raindrop` then, and both install the `raindrop` command and Python
+package.
+
+```bash
+python -m pip install raindrop-viewer
+```
+
+or the latest version from GitHub:
 
 ```bash
 python -m pip install git+https://github.com/NingWang1729/raindrop.git

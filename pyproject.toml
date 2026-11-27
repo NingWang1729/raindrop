@@ -4,7 +4,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "raindrop"
+# On PyPI as raindrop-viewer, since raindrop is another project's name there; the command and the import package are
+# both raindrop
+name = "raindrop-viewer"
 dynamic = ["version"]
 description = "Raindrop, a browser viewer for single-cell and spatial data, with its converter"
 requires-python = ">=3.10"
