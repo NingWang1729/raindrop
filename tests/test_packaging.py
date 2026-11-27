@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from pathlib import Path
 
 import raindrop
 from test_convert import CONVERT_PY, make_adata
@@ -37,6 +38,10 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # (datasets, environments, build output) is not copied
 SOURCE_FILES = ['pyproject.toml', 'README.md', 'LICENSE', 'convert.py']
 SOURCE_FOLDERS = ['raindrop', 'viewer']
+# Link targets in Markdown: inline links and images ([text](target "title"), with or without <>), reference links
+# ([name]: target) and HTML links (href="target")
+LINK_TARGETS = [re.compile(r'\]\(\s*<?([^)\s>]+)'), re.compile(r'^\s*\[[^\]]+\]:\s*<?([^\s>]+)', re.MULTILINE),
+                re.compile(r'href="([^"]+)"')]
 
 
 def test_converter_is_in_the_package():
@@ -136,3 +141,12 @@ def test_wheel_metadata_fills_the_pypi_page(tmp_path):
     assert 'Intended Audience :: Science/Research' in classifiers
     assert not [c for c in classifiers if c.startswith('License ::')]
     assert f'Issues, {REPO_URL}/issues' in metadata.get_all('Project-URL', [])
+
+
+def test_readme_links_work_on_pypi():
+    """PyPI shows the README without the repository's files and without heading anchors, so every link in it is a
+    full address."""
+    readme = Path(ROOT, 'README.md').read_text(encoding='utf-8')
+    targets = [target for pattern in LINK_TARGETS for target in pattern.findall(readme)]
+    assert targets
+    assert [target for target in targets if not target.startswith('https://')] == []

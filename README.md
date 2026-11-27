@@ -44,7 +44,8 @@ raindrop view my.h5ad
 The file needs at least one 2D or 3D `obsm` entry to plot (e.g. `spatial` or `X_umap`); genes come from `X`.
 `raindrop view` converts the file into a dataset folder, serves the viewer and that folder on this computer, and opens
 the browser at the viewer; Ctrl-C stops it. It takes every converter option (see
-[Converter options](#converter-options)), e.g. `raindrop view my.h5ad --color cell_type --filters region`.
+[Converter options](https://github.com/NingWang1729/raindrop#converter-options)), e.g.
+`raindrop view my.h5ad --color cell_type --filters region`.
 
 ### How `raindrop view` works
 
@@ -112,7 +113,8 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
   rotation sets every angle to 0 (Reset view for 2D embeddings). Show axes toggles the axes box and labels.
 - **Color by** any obs column from the color menu, or by a gene: type its name in the gene box (with suggestions)
   and press Enter. Datasets with several gene sources have a menu to pick the source. Categories get colors from
-  the data (see [Colors](#colors)) or generated ones; numbers and genes get a color bar.
+  the data (see [Colors](https://github.com/NingWang1729/raindrop#colors)) or generated ones; numbers and genes get a
+  color bar.
 - **Filters.** Add a filter panel per obs column from the "+ Add filter..." menu: tick values of a categorical
   column (a search box narrows long lists; drag over rows to tick several), or type a minimum and maximum for a
   numeric one. Filters combine: a cell is shown when it passes all of them. Each panel has **reverse** (show the cells
@@ -120,7 +122,8 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
   cell count. The count at the top says how many cells are shown.
 - **Legend.** The panel to the right of the plots lists the colored column's values with their cell counts. Ticking
   its rows sets the filter on that column, with the same reverse and clear buttons. Grouped columns (see
-  [Groups](#groups)) show as a tree in both the filter panel and the legend.
+  [Groups](https://github.com/NingWang1729/raindrop#groups)) show as a tree in both the filter panel and the
+  legend.
 - **Shown and filtered-out cells.** The point size and opacity table sets both for the cells that pass the filters
   (Shown) and for the rest (Filtered out), each with a slider and a number box; "Filtered-out cells keep their colors"
   draws filtered-out cells in their colors rather than grey.
@@ -138,8 +141,9 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
 
 `raindrop convert --help` lists every option. The converter exports every `obs` column (numbers as ranges,
 everything else as categories, at most 65536 per column, counting the 'NA' category for missing values;
-`<column>_color` columns only give colors, see [Colors](#colors)), every 2D or 3D `obsm` entry, and every gene in
-`X` (stored as two-byte whole counts if all values are whole numbers up to 65535, else as four-byte floats).
+`<column>_color` columns only give colors, see [Colors](https://github.com/NingWang1729/raindrop#colors)), every 2D or
+3D `obsm` entry, and every gene in `X` (stored as two-byte whole counts if all values are whole numbers up to 65535,
+else as four-byte floats).
 An example with several options:
 
 ```bash
@@ -274,11 +278,12 @@ dependency.
 ## License
 
 Raindrop is free software, licensed under the GNU Lesser General Public License, version 3 or (at your option) any
-later version (LGPL-3.0-or-later). The LGPL builds on the GNU General Public License, version 3; [LICENSE](LICENSE)
-holds both texts.
+later version (LGPL-3.0-or-later). The LGPL builds on the GNU General Public License, version 3;
+[LICENSE](https://github.com/NingWang1729/raindrop/blob/master/LICENSE) holds both texts.
 
 ## Third-party code
 
 `viewer/vendor/` holds three.js r160 (`three.module.min.js`) and its TrackballControls (`TrackballControls.js`, from
 the three.js repository's `examples/jsm/controls/`), both unmodified. three.js is Copyright © 2010-2023 three.js
-authors, under the MIT License; the full notice is in `viewer/vendor/THREE_LICENSE`.
+authors, under the MIT License; the full notice is in
+[`viewer/vendor/THREE_LICENSE`](https://github.com/NingWang1729/raindrop/blob/master/viewer/vendor/THREE_LICENSE).
