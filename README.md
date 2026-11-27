@@ -12,19 +12,62 @@ host can serve it, and any page can embed it.
 
 ## Quick start
 
-Install the converter's dependencies (Python 3.10 or later), from a clone of this repository:
+Install Raindrop (Python 3.10 or later) from GitHub:
+
+```bash
+python -m pip install git+https://github.com/NingWang1729/raindrop.git
+```
+
+or from a clone of this repository:
 
 ```bash
 git clone https://github.com/NingWang1729/raindrop.git
 cd raindrop
-python -m pip install -e .    # or just the dependencies: python -m pip install anndata numpy pandas scipy
+python -m pip install .    # or -e . to work on the code
 ```
 
-Convert an `.h5ad` file into a dataset folder (the folder must not exist yet). The file needs at least one 2D or 3D
-`obsm` entry to plot (e.g. `spatial` or `X_umap`); genes come from `X`.
+Then show an `.h5ad` file in the browser:
 
 ```bash
-python convert.py my.h5ad data/my_dataset
+raindrop view my.h5ad
+```
+
+The file needs at least one 2D or 3D `obsm` entry to plot (e.g. `spatial` or `X_umap`); genes come from `X`.
+`raindrop view` converts the file into a dataset folder, serves the viewer and that folder on this computer, and opens
+the browser at the viewer; Ctrl-C stops it. It takes every converter option (see
+[Converter options](#converter-options)), e.g. `raindrop view my.h5ad --color cell_type --filters region`.
+
+### How `raindrop view` works
+
+- **The cache.** The dataset folder goes in a cache folder and is reused: viewing the same file again with the same
+  options opens at once, without converting. A changed file (its size or modification time), other options, a
+  changed `--gene-source` or `--hierarchy-csv` file, or a new Raindrop version converts again, into a new folder.
+  `raindrop view` prints the folder it used and whether it reused or converted it. Folders are never deleted
+  automatically: delete them (or the whole cache folder) to free space.
+- **Where the cache is.** `--cache-dir DIR` for one run, else the environment variable `RAINDROP_CACHE_DIR` (set it
+  once, e.g. to a large scratch disk), else the platform's cache folder: `$XDG_CACHE_HOME/raindrop` or
+  `~/.cache/raindrop` on Linux, `~/Library/Caches/raindrop` on macOS, `%LOCALAPPDATA%\raindrop\Cache` on Windows. The
+  folder is created if missing; one that cannot be written stops `raindrop view` with a message naming the setting.
+- **`--out DIR`** uses that dataset folder instead of the cache (`--cache-dir` then has no effect). If `raindrop view`
+  made it from the same file and options, it is reused; if from others, it is converted again. A folder that
+  `raindrop view` did not make (your own, or one written by `raindrop convert`) is never overwritten: `raindrop view`
+  stops and asks for another folder.
+- **`--port PORT`** is the port to serve on (default 8000; `--port 0` picks a free one). A port in use stops
+  `raindrop view` with a message; choose another. The server answers only on this computer (127.0.0.1), only for the
+  viewer and the dataset, and only at an address with a random part, so other users of a shared computer cannot
+  reach it from the port alone.
+- **`--no-browser`** prints the address instead of opening a browser.
+- **On a remote machine** (an ssh session, or no display), `raindrop view` prints the address and the ssh command
+  that forwards the port, e.g. `ssh -L 8000:127.0.0.1:8000 <user>@<host>`. Run that command on your own computer,
+  then open the printed address there. To reach a compute node through a login node, add `-J <user>@<login host>`.
+
+### Converting and hosting yourself
+
+To publish datasets, or to serve several at once, convert them into folders and serve them with any static file
+server. In a clone of this repository, convert an `.h5ad` file into a dataset folder (the folder must not exist yet):
+
+```bash
+raindrop convert my.h5ad data/my_dataset    # in a clone, the same as: python convert.py my.h5ad data/my_dataset
 ```
 
 Serve the repository root with any static file server, for example Python's:
@@ -81,8 +124,8 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
 
 ## Converter options
 
-Once the package is installed (`python -m pip install .`), `raindrop convert my.h5ad data/my_dataset [options]` is
-the same as `python convert.py my.h5ad data/my_dataset [options]`.
+`raindrop convert my.h5ad data/my_dataset [options]` is the same as `python convert.py my.h5ad data/my_dataset
+[options]`, and `raindrop view my.h5ad [options]` takes the same options.
 
 `python convert.py --help` lists every option. The converter exports every `obs` column (numbers as ranges,
 everything else as categories, at most 65536 per column, counting the 'NA' category for missing values;
@@ -212,6 +255,9 @@ uv venv .venv && uv pip install --python .venv/bin/python -e '.[test]'
 .venv/bin/python -m pytest tests/                 # converter tests
 node tests/test_viewer.mjs                        # viewer filtering, color and position logic (Node.js)
 ```
+
+`raindrop view` reuses a cached conversion until the file, the options or the version numbers change, so after
+changing `convert.py` in a clone, use another `--out` or delete the cached folder.
 
 three.js is vendored in `viewer/vendor/` (see Third-party code below), so the viewer has no build step and no CDN
 dependency.
