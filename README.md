@@ -215,7 +215,7 @@ Category colors come from scanpy-style `uns['<column>_colors']` (one color per c
 `obs['<column>_color']` column that gives every cell of a category the same color (empty cells, None or NaN, are
 ignored). Categories without colors get generated ones.
 
-The dataset folder's layout is described at the top of `convert.py` and in `python convert.py --help`.
+The dataset folder's layout is described at the top of `raindrop/convert.py` and in `python convert.py --help`.
 
 ## Hosting and embedding
 
@@ -257,7 +257,7 @@ node tests/test_viewer.mjs                        # viewer filtering, color and 
 ```
 
 `raindrop view` reuses a cached conversion until the file, the options or the version numbers change, so after
-changing `convert.py` in a clone, use another `--out` or delete the cached folder.
+changing `raindrop/convert.py` in a clone, use another `--out` or delete the cached folder.
 
 three.js is vendored in `viewer/vendor/` (see Third-party code below), so the viewer has no build step and no CDN
 dependency.

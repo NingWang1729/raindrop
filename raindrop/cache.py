@@ -30,8 +30,7 @@ from pathlib import Path
 
 import platformdirs
 
-import convert
-from raindrop import __version__
+from raindrop import __version__, convert
 
 # Environment variable that sets the cache folder, e.g. to a large scratch disk
 CACHE_DIR_VARIABLE = 'RAINDROP_CACHE_DIR'

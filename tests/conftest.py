@@ -1,5 +1,5 @@
 """
-Make convert.py importable from the tests without installing the package.
+Make the source tree's raindrop package importable from the tests without installing it.
 
 raindrop: a browser viewer for single-cell and spatial data
 Copyright (C) 2026 Ning Wang
