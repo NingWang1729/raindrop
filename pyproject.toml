@@ -4,13 +4,39 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "raindrop"
+# On PyPI as raindrop-viewer, since raindrop is another project's name there; the command and the import package are
+# both raindrop
+name = "raindrop-viewer"
 dynamic = ["version"]
 description = "Raindrop, a browser viewer for single-cell and spatial data, with its converter"
+readme = "README.md"
 requires-python = ">=3.10"
 license = "LGPL-3.0-or-later"
 license-files = ["LICENSE"]
+authors = [{name = "Ning Wang"}]
 dependencies = ["anndata>=0.10", "numpy", "pandas", "platformdirs", "scipy"]
+keywords = ["single-cell", "spatial transcriptomics", "anndata", "h5ad", "visualization", "point cloud", "viewer",
+            "three.js"]
+# No "License ::" classifier: setuptools 77 refuses one next to the SPDX license expression above (PEP 639)
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+
+[project.urls]
+Homepage = "https://github.com/NingWang1729/raindrop"
+Repository = "https://github.com/NingWang1729/raindrop"
+Issues = "https://github.com/NingWang1729/raindrop/issues"
 
 [project.optional-dependencies]
 # The packaging tests build a wheel with setuptools

@@ -17,20 +17,31 @@ GNU Lesser General Public License for more details.
 You should have received a copy of the GNU Lesser General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import configparser
+import email.parser
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import zipfile
+from pathlib import Path
 
+import raindrop
 from test_convert import CONVERT_PY, make_adata
 
+# The repository on GitHub
+REPO_URL = 'https://github.com/NingWang1729/raindrop'
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # What a wheel could be built from (the root convert.py too, to show it is left out); anything else in a clone
 # (datasets, environments, build output) is not copied
 SOURCE_FILES = ['pyproject.toml', 'README.md', 'LICENSE', 'convert.py']
 SOURCE_FOLDERS = ['raindrop', 'viewer']
+# Link targets in Markdown: inline links and images ([text](target "title"), with or without <>), reference links
+# ([name]: target) and HTML links (href="target")
+LINK_TARGETS = [re.compile(r'\]\(\s*<?([^)\s>]+)'), re.compile(r'^\s*\[[^\]]+\]:\s*<?([^\s>]+)', re.MULTILINE),
+                re.compile(r'href="([^"]+)"')]
 
 
 def test_converter_is_in_the_package():
@@ -93,3 +104,49 @@ def test_wheel_has_the_package_and_no_top_level_convert(tmp_path):
                  'raindrop/viewer/vendor/THREE_LICENSE'):
         assert name in names, name
     assert any(name.endswith('.dist-info/licenses/LICENSE') for name in names)
+
+
+def dist_info(wheel):
+    """The .dist-info folder of a wheel (a ZipFile)."""
+    return next(name for name in wheel.namelist() if name.endswith('.dist-info/METADATA')).rsplit('/', 1)[0]
+
+
+def read_metadata(wheel):
+    """The METADATA of a wheel (a ZipFile) as an email message."""
+    return email.parser.Parser().parsestr(wheel.read(f'{dist_info(wheel)}/METADATA').decode())
+
+
+def test_wheel_installs_as_raindrop_viewer(tmp_path):
+    """pip installs the wheel as raindrop-viewer (raindrop is another project's name on PyPI), with the raindrop
+    command."""
+    with zipfile.ZipFile(build_wheel(tmp_path)) as wheel:
+        metadata = read_metadata(wheel)
+        entry_points = configparser.ConfigParser()
+        entry_points.read_string(wheel.read(f'{dist_info(wheel)}/entry_points.txt').decode())
+    # Names are compared as pip does (PEP 503: case, '-', '_' and '.' alike)
+    assert re.sub(r'[-_.]+', '-', metadata['Name']).lower() == 'raindrop-viewer'
+    assert metadata['Version'] == raindrop.__version__
+    assert entry_points['console_scripts']['raindrop'] == 'raindrop.cli:main'
+
+
+def test_wheel_metadata_fills_the_pypi_page(tmp_path):
+    """The README is the PyPI page's description, next to the author, keywords, classifiers and project links."""
+    with zipfile.ZipFile(build_wheel(tmp_path)) as wheel:
+        metadata = read_metadata(wheel)
+    assert metadata['Description-Content-Type'] == 'text/markdown'
+    assert '# Raindrop' in metadata.get_payload()
+    assert metadata['Author'] == 'Ning Wang'
+    assert 'single-cell' in metadata['Keywords']
+    classifiers = metadata.get_all('Classifier', [])
+    assert 'Intended Audience :: Science/Research' in classifiers
+    assert not [c for c in classifiers if c.startswith('License ::')]
+    assert f'Issues, {REPO_URL}/issues' in metadata.get_all('Project-URL', [])
+
+
+def test_readme_links_work_on_pypi():
+    """PyPI shows the README without the repository's files and without heading anchors, so every link in it is a
+    full address."""
+    readme = Path(ROOT, 'README.md').read_text(encoding='utf-8')
+    targets = [target for pattern in LINK_TARGETS for target in pattern.findall(readme)]
+    assert targets
+    assert [target for target in targets if not target.startswith('https://')] == []
