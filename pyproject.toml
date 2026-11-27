@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "raindrop"
-version = "0.1.0"
-description = "Converter for the Raindrop single-cell and spatial data viewer"
+dynamic = ["version"]
+description = "Raindrop, a browser viewer for single-cell and spatial data, with its converter"
 requires-python = ">=3.10"
 license = "LGPL-3.0-or-later"
 license-files = ["LICENSE"]
-dependencies = ["anndata>=0.10", "numpy", "pandas", "scipy"]
+dependencies = ["anndata>=0.10", "numpy", "pandas", "platformdirs", "scipy"]
 
 [project.optional-dependencies]
 test = ["pytest"]
@@ -18,7 +18,21 @@ test = ["pytest"]
 [project.scripts]
 raindrop = "raindrop.cli:main"
 
-# The converter is a single module and the raindrop command a small package; tests/ and data/ are not Python packages
+# The converter is a single module and the raindrop command a small package; tests/ and data/ are not Python packages.
+# The viewer stays in viewer/ at the repository root; the raindrop.viewer entries copy it into the package as
+# raindrop/viewer, for raindrop view (a new folder in viewer/ needs its own entry in both lists)
 [tool.setuptools]
 py-modules = ["convert"]
-packages = ["raindrop"]
+packages = ["raindrop", "raindrop.viewer", "raindrop.viewer.js", "raindrop.viewer.vendor"]
+
+[tool.setuptools.package-dir]
+"raindrop.viewer" = "viewer"
+
+[tool.setuptools.package-data]
+"raindrop.viewer" = ["*.html", "*.css", "*.json"]
+"raindrop.viewer.js" = ["*.js"]
+"raindrop.viewer.vendor" = ["*"]
+
+# One version number, in the package (the cache of raindrop view depends on it)
+[tool.setuptools.dynamic]
+version = {attr = "raindrop.__version__"}

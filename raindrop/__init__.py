@@ -15,3 +15,5 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """The raindrop command (raindrop.cli). The converter itself is the top-level module convert (convert.py)."""
+
+__version__ = '0.1.0'
