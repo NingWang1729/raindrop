@@ -44,6 +44,8 @@ LINK_TARGETS = [re.compile(r'\]\(\s*<?([^)\s>]+)'), re.compile(r'^\s*\[[^\]]+\]:
                 re.compile(r'href="([^"]+)"')]
 # A release's heading in CHANGELOG.md (## [0.1.1] - 2026-11-27; not [Unreleased])
 CHANGELOG_RELEASE = re.compile(r'^## \[(\d[^\]]*)\]', re.MULTILINE)
+# The version line of CITATION.cff
+CITATION_VERSION = re.compile(r'^version: (\S+)$', re.MULTILINE)
 
 
 def test_converter_is_in_the_package():
@@ -164,3 +166,9 @@ def test_pypi_page_links_the_changelog(tmp_path):
     with zipfile.ZipFile(build_wheel(tmp_path)) as wheel:
         metadata = read_metadata(wheel)
     assert f'Changelog, {REPO_URL}/blob/master/CHANGELOG.md' in metadata.get_all('Project-URL', [])
+
+
+def test_citation_names_the_version():
+    """The version in CITATION.cff is the package's version."""
+    citation = Path(ROOT, 'CITATION.cff').read_text(encoding='utf-8')
+    assert CITATION_VERSION.findall(citation) == [raindrop.__version__]
