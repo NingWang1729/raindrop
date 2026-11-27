@@ -426,9 +426,9 @@ class App {
   // Show embedding `name` in a view: load its positions (cells without one are left out), frame the camera on
   // the reference side with every angle 0, and refresh the view (its colors are per cell and stay). view.entry is
   // set with the positions, so it always names what is drawn. Only the view's newest embedding request draws
-  // (view.loads.embedding counts them): one that finishes after a later request, or fails after it, is dropped. A
-  // failed newest request puts the embedding menu back on the drawn embedding and rejects (the handlers show the
-  // error, see reportErrors)
+  // (view.loads.embedding counts them): one that finishes after a later request, or fails after it, or after its view
+  // was removed, is dropped, clearing its own status message if no other has replaced it. A failed newest request
+  // puts the embedding menu back on the drawn embedding and rejects (the handlers show the error, see reportErrors)
   async setEmbedding(view, name) {
     const load = ++view.loads.embedding;
     const entry = this.manifest.embeddings.find((e) => e.name === name);
@@ -438,11 +438,17 @@ class App {
     try {
       positions = await this.dataset.embedding(name);
     } catch (error) {
-      if (load !== view.loads.embedding) return;
+      if (load !== view.loads.embedding) {
+        this.clearStatus(message);
+        return;
+      }
       if (view === this.selected && view.entry) document.getElementById('embedding').value = view.entry.name;
       throw error;
     }
-    if (load !== view.loads.embedding) return;
+    if (load !== view.loads.embedding) {
+      this.clearStatus(message);
+      return;
+    }
 
     view.entry = entry;
     view.valid = validMask(positions, entry.dims);

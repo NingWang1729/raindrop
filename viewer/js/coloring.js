@@ -93,8 +93,9 @@ export class Coloring {
   // tile's corner names it (shown with several views). view.color and view.cellValues (the per-cell values the colors
   // were made from, with their color, for the hover label) are set with the colors once loaded, so they always
   // describe what is drawn. Only the view's newest color request draws (view.loads.color counts them): one that
-  // finishes after a later request, or fails after it, is dropped. A failed newest request puts the side panel back on
-  // the drawn color and rejects (the handlers show the error, see reportErrors)
+  // finishes after a later request, or fails after it, or after its view was removed, is dropped, clearing its own
+  // status message if no other has replaced it. A failed newest request puts the side panel back on the drawn color
+  // and rejects (the handlers show the error, see reportErrors)
   async setColor(view, color) {
     const load = ++view.loads.color;
     const message = `Loading ${color.name}...`;
@@ -104,11 +105,17 @@ export class Coloring {
     try {
       values = await (isGene ? this.dataset.geneValues(color.source, color.name) : this.dataset.fieldValues(color.name));
     } catch (error) {
-      if (load !== view.loads.color) return;
+      if (load !== view.loads.color) {
+        this.clearStatus(message);
+        return;
+      }
       if (view === this.selectedView()) this.showColorControls(view);
       throw error;
     }
-    if (load !== view.loads.color) return;
+    if (load !== view.loads.color) {
+      this.clearStatus(message);
+      return;
+    }
 
     const rgb = isGene ? this.geneColors(view, color, values) : this.fieldColors(view, color, values);
     view.scene.setColors(rgb);
