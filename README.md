@@ -134,16 +134,16 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
 ## Converter options
 
 `raindrop convert my.h5ad data/my_dataset [options]` is the same as `python convert.py my.h5ad data/my_dataset
-[options]`, and `raindrop view my.h5ad [options]` takes the same options.
+[options]` in a clone, and `raindrop view my.h5ad [options]` takes the same options.
 
-`python convert.py --help` lists every option. The converter exports every `obs` column (numbers as ranges,
+`raindrop convert --help` lists every option. The converter exports every `obs` column (numbers as ranges,
 everything else as categories, at most 65536 per column, counting the 'NA' category for missing values;
 `<column>_color` columns only give colors, see [Colors](#colors)), every 2D or 3D `obsm` entry, and every gene in
 `X` (stored as two-byte whole counts if all values are whole numbers up to 65535, else as four-byte floats).
 An example with several options:
 
 ```bash
-python convert.py my.h5ad data/my_dataset --name "My dataset" \
+raindrop convert my.h5ad data/my_dataset --name "My dataset" \
     --color cell_type --filters cell_type region --select region A B \
     --axis-labels AP DV LR --ends spatial anterior posterior dorsal ventral left right --view left
 ```
@@ -224,18 +224,18 @@ Category colors come from scanpy-style `uns['<column>_colors']` (one color per c
 `obs['<column>_color']` column that gives every cell of a category the same color (empty cells, None or NaN, are
 ignored). Categories without colors get generated ones.
 
-The dataset folder's layout is described at the top of `raindrop/convert.py` and in `python convert.py --help`.
+The dataset folder's layout is described at the top of `raindrop/convert.py` and in `raindrop convert --help`.
 
 ## Hosting and embedding
 
 Raindrop consists only of static files, so any static web host can serve it (a lab web server, GitHub Pages, cloud
-storage serving a website, ...). Put `viewer/` and the dataset folders on the host, and open
-`viewer/?data=<dataset folder>`. The dataset folder must be served alongside the viewer, or be reachable from it:
-`?data=` is a URL resolved relative to the viewer page (`viewer/`), so `../data/my_dataset/` is the folder
+storage serving a website, ...). Put `viewer/` (from a clone of this repository) and the dataset folders on the host,
+and open `viewer/?data=<dataset folder>`. The dataset folder must be served alongside the viewer, or be reachable from
+it: `?data=` is a URL resolved relative to the viewer page (`viewer/`), so `../data/my_dataset/` is the folder
 `data/my_dataset` beside `viewer/`. An absolute URL works too; a dataset on another host must allow cross-origin
-requests (CORS), since the viewer downloads its files with JavaScript. The repository's `data/` folder is ignored
-by git, so converted datasets there are not committed. A dataset's `manifest.json` records the source of the
-`.h5ad` file it was converted from.
+requests (CORS), since the viewer downloads its files with JavaScript. The repository's `data/` folder is ignored by
+git, so converted datasets there are not committed. A dataset's `manifest.json` records the source of the `.h5ad` file
+it was converted from.
 
 ### URL parameters
 
@@ -257,7 +257,7 @@ full screen in the frame, the Full screen button is left out.
 
 ## Development
 
-Install the test dependencies and run the unit tests:
+In a clone of this repository, install the test dependencies and run the unit tests:
 
 ```bash
 uv venv .venv && uv pip install --python .venv/bin/python -e '.[test]'
