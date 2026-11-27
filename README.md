@@ -166,8 +166,8 @@ python convert.py my.h5ad data/my_dataset --name "My dataset" \
 ### Colors
 
 Category colors come from scanpy-style `uns['<column>_colors']` (one color per category) or from a per-cell
-`obs['<column>_color']` column that gives every cell of a category the same color. Categories without colors get
-generated ones.
+`obs['<column>_color']` column that gives every cell of a category the same color (empty cells, None or NaN, are
+ignored). Categories without colors get generated ones.
 
 The dataset folder's layout is described at the top of `convert.py` and in `python convert.py --help`.
 

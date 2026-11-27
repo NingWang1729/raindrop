@@ -292,11 +292,48 @@ def test_embedding_axis_labels():
     assert embedding_axis_labels('X_other', labels, {}, {'X_other': ['LR', 'PA', 'VD']}) == labels
 
 
-def test_conflicting_colors_warn(tmp_path):
+# Subclasses of make_adata are a, b, a, NA, c, so the categories are a, b, c, NA
+@pytest.mark.parametrize('empty', [None, np.nan])
+def test_empty_color_cells_are_ignored(tmp_path, recwarn, empty):
+    # Regression: empty color cells became the color text 'None' or 'nan', and a category with a color and an empty
+    # cell counted as having two colors, which dropped the colors of the whole column
+    adata, _ = make_adata()
+    # 'a' has a color and an empty cell, 'b' only an empty cell: 'a' keeps its color, 'b' gets none
+    adata.obs['Subclass_color'] = ['#ff0000', empty, empty, None, '#0000ff']
+    _, manifest = run(tmp_path, adata)
+    assert not [w for w in recwarn if 'several colors' in str(w.message)]
+    assert manifest['fields'][0]['colors'] == ['#ff0000', None, '#0000ff', None]
+
+
+def test_all_empty_color_column(tmp_path):
+    # Regression: every category got the color text 'nan'. NaN only: anndata cannot write an all-None column, and an
+    # all-NaN one comes back as float64
+    adata, _ = make_adata()
+    adata.obs['Subclass_color'] = np.nan
+    _, manifest = run(tmp_path, adata)
+    assert manifest['fields'][0]['colors'] == [None] * 4
+
+
+def test_color_column_without_empty_cells(tmp_path):
+    # Coverage only (passes before and after empty cells were ignored): a full color column gives each category its
+    # color, and the NA category none
+    adata, _ = make_adata()
+    adata.obs['Subclass_color'] = ['#ff0000', '#00ff00', '#ff0000', '#123456', '#0000ff']
+    _, manifest = run(tmp_path, adata)
+    assert manifest['fields'][0]['colors'] == ['#ff0000', '#00ff00', '#0000ff', None]
+
+
+@pytest.mark.parametrize('cell_colors', [
+    ['#ff0000', '#00ff00', '#0000ff', None, '#0000ff'],
+    # An empty cell does not hide a conflict between the cells that have colors (coverage only: passes on the
+    # parent too)
+    ['#ff0000', None, '#0000ff', None, '#0000ff'],
+])
+def test_conflicting_colors_warn(tmp_path, cell_colors):
     adata, _ = make_adata()
 
     # Two colors for category 'a': warn and leave the colors to the viewer
-    adata.obs['Subclass_color'] = ['#ff0000', '#00ff00', '#0000ff', None, '#0000ff']
+    adata.obs['Subclass_color'] = cell_colors
     with pytest.warns(UserWarning, match='several colors for one category'):
         _, manifest = run(tmp_path, adata)
     assert manifest['fields'][0]['colors'] == [None] * 4
