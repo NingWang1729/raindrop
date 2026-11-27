@@ -224,3 +224,8 @@ def test_license_metadata_declares_three_js(tmp_path):
         pkg_info = next(name for name in sdist.getnames() if name.count('/') == 1 and name.endswith('/PKG-INFO'))
         sdist_metadata = email.parser.Parser().parsestr(sdist.extractfile(pkg_info).read().decode())
     assert sdist_metadata['License-Expression'] == 'LGPL-3.0-or-later AND MIT'
+
+
+def test_version():
+    # Raised with each release, together with CHANGELOG.md and CITATION.cff (checked above)
+    assert raindrop.__version__ == '0.1.1'

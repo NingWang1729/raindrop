@@ -5,6 +5,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-27
+
 ### Changed
 
 - Raindrop is on PyPI as `raindrop-viewer` (`pip install raindrop-viewer`), since the name `raindrop` belongs to
@@ -16,6 +18,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
   `python convert.py ...` works as before, with the same options and help.
 - The package's license metadata names three.js's MIT license (for the files in `viewer/vendor/`) next to
   Raindrop's LGPL.
+- `raindrop view` converts each dataset again once after the upgrade, since the version is part of its cache key; the
+  folders 0.1.0 made stay in the cache folder (e.g. `~/.cache/raindrop`) until you delete them.
 
 ## [0.1.0] - 2026-11-27
 
@@ -40,5 +44,6 @@ First release.
 - Robust loading: a download that finishes after a newer choice is dropped, and a failed one shows an error and can
   be retried.
 
-[Unreleased]: https://github.com/NingWang1729/raindrop/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/NingWang1729/raindrop/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/NingWang1729/raindrop/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/NingWang1729/raindrop/releases/tag/v0.1.0
