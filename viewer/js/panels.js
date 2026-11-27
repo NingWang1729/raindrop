@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // lists its values with checkboxes, a numeric column's has min and max boxes. All panels combine with AND
 // (filters.js) and belong to the selected view's settings.
 import * as filters from './filters.js';
-import { el, enableDragSelect, reverseToggle, showReversed, sortSelect } from './ui.js';
+import { el, enableDragSelect, reportErrors, reverseToggle, showReversed, sortSelect } from './ui.js';
 
 export class FilterPanels {
   // manifest, dataset: the open dataset (data.js); categories: column titles and rows (categories.js);
@@ -40,11 +40,19 @@ export class FilterPanels {
     return this.selectedFilters();
   }
 
-  // The add-filter menu adds a panel for the column picked (its options: updateAddFilterOptions)
+  // The add-filter menu adds a panel for the column picked (its options: updateAddFilterOptions). A column whose
+  // values fail to load shows the error in the status line, and the menu goes back to its prompt
   listenForAddFilter() {
-    document.getElementById('add-filter').addEventListener('change', async (event) => {
-      if (event.target.value) await this.addFilter(event.target.value);
-    });
+    const add = document.getElementById('add-filter');
+    add.addEventListener('change', () => reportErrors(async () => {
+      if (!add.value) return;
+      try {
+        await this.addFilter(add.value);
+      } catch (error) {
+        add.value = '';
+        throw error;
+      }
+    }));
   }
 
   // A filter on obs column `name`, with its panel: the existing one if the column has one. A filter starts with

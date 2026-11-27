@@ -48,6 +48,17 @@ export function blurOnEnter(input) {
   });
 }
 
+// Run an event handler's async work (a download, then drawing): an error shows in the status line as 'Error: ...',
+// as when the dataset opens (app.js main), and in the console, instead of becoming an unhandled rejection
+export async function reportErrors(task) {
+  try {
+    await task();
+  } catch (error) {
+    document.getElementById('status').textContent = `Error: ${error.message}`;
+    console.error(error);
+  }
+}
+
 // A count with thousands separators, the same in every locale (e.g. 12,345)
 export function formatCount(n) {
   return n.toLocaleString('en-US');
