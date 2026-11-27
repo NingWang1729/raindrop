@@ -30,6 +30,8 @@ import zipfile
 import raindrop
 from test_convert import CONVERT_PY, make_adata
 
+# The repository on GitHub
+REPO_URL = 'https://github.com/NingWang1729/raindrop'
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # What a wheel could be built from (the root convert.py too, to show it is left out); anything else in a clone
 # (datasets, environments, build output) is not copied
@@ -120,3 +122,17 @@ def test_wheel_installs_as_raindrop_viewer(tmp_path):
     assert re.sub(r'[-_.]+', '-', metadata['Name']).lower() == 'raindrop-viewer'
     assert metadata['Version'] == raindrop.__version__
     assert entry_points['console_scripts']['raindrop'] == 'raindrop.cli:main'
+
+
+def test_wheel_metadata_fills_the_pypi_page(tmp_path):
+    """The README is the PyPI page's description, next to the author, keywords, classifiers and project links."""
+    with zipfile.ZipFile(build_wheel(tmp_path)) as wheel:
+        metadata = read_metadata(wheel)
+    assert metadata['Description-Content-Type'] == 'text/markdown'
+    assert '# Raindrop' in metadata.get_payload()
+    assert metadata['Author'] == 'Ning Wang'
+    assert 'single-cell' in metadata['Keywords']
+    classifiers = metadata.get_all('Classifier', [])
+    assert 'Intended Audience :: Science/Research' in classifiers
+    assert not [c for c in classifiers if c.startswith('License ::')]
+    assert f'Issues, {REPO_URL}/issues' in metadata.get_all('Project-URL', [])
