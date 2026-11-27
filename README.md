@@ -186,8 +186,8 @@ by git, so converted datasets there are not committed. A dataset's `manifest.jso
 | Parameter | What it does |
 | --- | --- |
 | `data=<dataset folder URL>` | The dataset to open (required). |
-| `embed=1` | Widget mode for another page's iframe: a bar over the view with a More / Fewer controls toggle and a Full screen button. A plain scroll over the view scrolls the host page (with a short hint); Ctrl + scroll (Cmd + scroll on a Mac) or a trackpad pinch zooms. |
-| `controls=compact` or `controls=full` | With `embed=1`, the controls the widget opens with. `compact` (the default) hides the side panel and puts the cell count, the color menu, the gene box and the reset button in the bar, which suits narrow frames (the legend still filters by ticking values); `full` shows the side panel with every control. Without `embed=1` it has no effect. |
+| `embed=1` or `embed=true` | Widget mode for another page's iframe: a bar over the view with a More / Fewer controls toggle and a Full screen button. A plain scroll over the view scrolls the host page (with a short hint); Ctrl + scroll (Cmd + scroll on a Mac) or a trackpad pinch zooms. `embed=0`, `embed=false` or no `embed` opens the full viewer. Values are read in any case (`embed=TRUE`); any other value (an empty one included) stops the page with a message naming the allowed values. |
+| `controls=compact` or `controls=full` | In widget mode, the controls the widget opens with, in any case (`controls=Full`). `compact` (the default) hides the side panel and puts the cell count, the color menu, the gene box and the reset button in the bar, which suits narrow frames (the legend still filters by ticking values); `full` shows the side panel with every control. In widget mode any other value stops the page with a message naming the allowed values. Without widget mode it has no effect, whatever its value: the viewer opens as usual and warns in the browser console and, once the dataset has opened, in the status line. |
 
 ### Embedding in a page
 

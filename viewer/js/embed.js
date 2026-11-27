@@ -1,11 +1,16 @@
-// Embed mode (?embed=1), for a widget in another page's iframe: a bar over the view's top left with a toggle between
-// compact controls (side panel hidden; the cell count, color menu, gene box and reset button in the bar) and the full
-// side panel, and a full screen button. ?controls= (compact by default) sets the controls it opens with. It works on
-// index.html's elements by id only, so it needs nothing from the App.
+// Embed mode (?embed=1 or ?embed=true), for a widget in another page's iframe: a bar over the view's top left with a
+// toggle between compact controls (side panel hidden; the cell count, color menu, gene box and reset button in the
+// bar) and the full side panel, and a full screen button. ?controls= (compact by default) sets the controls it opens
+// with. It works on index.html's elements by id only, so it needs nothing from the App.
 import { el } from './ui.js';
 
-// Values of ?controls=
-export const EMBED_CONTROLS = ['compact', 'full'];
+// Values of ?embed= (any case) that turn embed mode on, and those that leave it off (as does no embed=)
+const EMBED_ON = ['1', 'true'];
+const EMBED_OFF = ['0', 'false'];
+// Values of ?controls= (any case)
+const EMBED_CONTROLS = ['compact', 'full'];
+// The warning for a ?controls= given without embed mode, where it has no effect
+export const CONTROLS_IGNORED = 'controls= has no effect without embed=1';
 
 // How long the "Ctrl + scroll to zoom" hint stays after the last plain scroll, in milliseconds
 const ZOOM_HINT_DURATION_MS = 1500;
@@ -15,6 +20,31 @@ const ZOOM_HINT_DURATION_MS = 1500;
 // runs
 const BORROWED_CONTROL_IDS = ['count', 'color-field', 'gene-box'];
 const BORROWED_BUTTON_ID = 'reset-rotation';
+
+// A URL parameter's value in lower case, if it is one of `allowed` (lower case); throws otherwise, naming the
+// parameter, the value as typed and every allowed value (e.g. "Unknown controls=big: use controls=compact or
+// controls=full.")
+export function canonicalOption(name, value, allowed) {
+  const canonical = value.toLowerCase();
+  if (!allowed.includes(canonical)) {
+    const choices = allowed.map((choice) => `${name}=${choice}`);
+    const listed = choices.length > 1 ? `${choices.slice(0, -1).join(', ')} or ${choices.at(-1)}` : choices[0];
+    throw new Error(`Unknown ${name}=${value}: use ${listed}.`);
+  }
+  return canonical;
+}
+
+// Whether ?embed= (value: as URLSearchParams.get gives it, null when absent) turns embed mode on; throws on a value
+// that is neither on nor off, an empty one included
+export function isEmbedOn(value) {
+  if (value === null) return false;
+  return EMBED_ON.includes(canonicalOption('embed', value, [...EMBED_ON, ...EMBED_OFF]));
+}
+
+// The controls an embed opens with, from ?controls= (null when absent: compact); throws on an unknown value
+export function parseControlsMode(value) {
+  return canonicalOption('controls', value ?? 'compact', EMBED_CONTROLS);
+}
 
 // Show the embed bar, opening with compact controls if controlsMode is 'compact', and let plain scrolls over the view
 // scroll the page
