@@ -15,6 +15,10 @@ dependencies = ["anndata>=0.10", "numpy", "pandas", "scipy"]
 [project.optional-dependencies]
 test = ["pytest"]
 
-# The converter is a single module; tests/ and data/ are not Python packages
+[project.scripts]
+raindrop = "raindrop.cli:main"
+
+# The converter is a single module and the raindrop command a small package; tests/ and data/ are not Python packages
 [tool.setuptools]
 py-modules = ["convert"]
+packages = ["raindrop"]

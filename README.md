@@ -81,6 +81,9 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
 
 ## Converter options
 
+Once the package is installed (`python -m pip install .`), `raindrop convert my.h5ad data/my_dataset [options]` is
+the same as `python convert.py my.h5ad data/my_dataset [options]`.
+
 `python convert.py --help` lists every option. The converter exports every `obs` column (numbers as ranges,
 everything else as categories, at most 65536 per column, counting the 'NA' category for missing values;
 `<column>_color` columns only give colors, see [Colors](#colors)), every 2D or 3D `obsm` entry, and every gene in
