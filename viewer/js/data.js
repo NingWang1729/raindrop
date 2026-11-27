@@ -57,10 +57,19 @@ export class Dataset {
     this.cache = new Map();
   }
 
-  // Download once, then reuse: the cache holds the promise, so concurrent requests share one download
-  // (a failed download stays cached as a rejected promise)
+  // Download once, then reuse: the cache holds the promise, so concurrent requests share one download. A failed
+  // download is dropped from the cache, so the requests made during it share its failure and the next one downloads
+  // again (e.g. after a passing network error)
   cached(key, load) {
-    if (!this.cache.has(key)) this.cache.set(key, load());
+    if (!this.cache.has(key)) {
+      const promise = load();
+      this.cache.set(key, promise);
+      // Callers still get the rejection from `promise`; this branch only evicts (only this entry, not a newer one).
+      // A load() that throws at once (an unknown embedding) caches nothing
+      promise.catch(() => {
+        if (this.cache.get(key) === promise) this.cache.delete(key);
+      });
+    }
     return this.cache.get(key);
   }
 
