@@ -1,8 +1,15 @@
+# setuptools 77 reads the SPDX license string below
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "raindrop"
 version = "0.1.0"
 description = "Converter for the Raindrop single-cell and spatial data viewer"
 requires-python = ">=3.10"
+license = "LGPL-3.0-or-later"
+license-files = ["LICENSE"]
 dependencies = ["anndata>=0.10", "numpy", "pandas", "scipy"]
 
 [project.optional-dependencies]
