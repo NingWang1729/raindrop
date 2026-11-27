@@ -1,0 +1,4 @@
+# Files the sdist carries beyond setuptools' defaults (the package, README, LICENSE, pyproject.toml, tests/test*.py),
+# so that its tests run: conftest.py, the root convert.py, the viewer's tests, and the changelog and citation, which
+# the packaging tests read
+include CHANGELOG.md CITATION.cff convert.py tests/conftest.py tests/test_viewer.mjs

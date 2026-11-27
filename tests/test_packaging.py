@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -38,6 +39,9 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # (datasets, environments, build output) is not copied
 SOURCE_FILES = ['pyproject.toml', 'README.md', 'LICENSE', 'convert.py']
 SOURCE_FOLDERS = ['raindrop', 'viewer']
+# What an sdist could be built from besides that: MANIFEST.in and the files it may add
+SDIST_FILES = ['MANIFEST.in', 'CHANGELOG.md', 'CITATION.cff']
+SDIST_FOLDERS = ['tests']
 # Link targets in Markdown: inline links and images ([text](target "title"), with or without <>), reference links
 # ([name]: target) and HTML links (href="target")
 LINK_TARGETS = [re.compile(r'\]\(\s*<?([^)\s>]+)'), re.compile(r'^\s*\[[^\]]+\]:\s*<?([^\s>]+)', re.MULTILINE),
@@ -84,20 +88,36 @@ def test_root_convert_py_runs_the_clones_converter_from_any_folder(tmp_path):
         assert json.load(manifest)['n_cells'] == 5
 
 
-def build_wheel(tmp_path):
-    """Build a wheel from a copy of the source (so the clone gets no build output); return the wheel's path."""
-    source = tmp_path / 'source'
+def copy_source(source, files, folders):
+    """Copy those files and folders of the clone that exist into the folder source (missing ones are left for the
+    test's checks to notice)."""
     source.mkdir()
-    for name in SOURCE_FILES:
-        shutil.copy(os.path.join(ROOT, name), source / name)
-    for name in SOURCE_FOLDERS:
+    for name in files:
+        if os.path.exists(os.path.join(ROOT, name)):
+            shutil.copy(os.path.join(ROOT, name), source / name)
+    for name in folders:
         shutil.copytree(os.path.join(ROOT, name), source / name, ignore=shutil.ignore_patterns('__pycache__'))
+
+
+def build(tmp_path, kind, files, folders):
+    """Build a wheel or an sdist (kind) from a copy of the source (so the clone gets no build output); return its
+    path."""
+    source = tmp_path / f'source_{kind}'
+    copy_source(source, files, folders)
     # setuptools' own build hook, without pip or an isolated environment, so the test needs no network
     built = subprocess.run([sys.executable, '-c', 'import sys; from setuptools import build_meta; '
-                            'print(build_meta.build_wheel(sys.argv[1]))', str(tmp_path / 'wheel')],
+                            f'print(build_meta.build_{kind}(sys.argv[1]))', str(tmp_path / kind)],
                            cwd=source, capture_output=True, text=True)
     assert built.returncode == 0, built.stderr
-    return tmp_path / 'wheel' / built.stdout.strip().splitlines()[-1]
+    return tmp_path / kind / built.stdout.strip().splitlines()[-1]
+
+
+def build_wheel(tmp_path):
+    return build(tmp_path, 'wheel', SOURCE_FILES, SOURCE_FOLDERS)
+
+
+def build_sdist(tmp_path):
+    return build(tmp_path, 'sdist', SOURCE_FILES + SDIST_FILES, SOURCE_FOLDERS + SDIST_FOLDERS)
 
 
 def test_wheel_has_the_package_and_no_top_level_convert(tmp_path):
@@ -172,3 +192,21 @@ def test_citation_names_the_version():
     """The version in CITATION.cff is the package's version."""
     citation = Path(ROOT, 'CITATION.cff').read_text(encoding='utf-8')
     assert CITATION_VERSION.findall(citation) == [raindrop.__version__]
+
+
+def test_sdist_runs_its_own_tests(tmp_path):
+    """The sdist carries every file its tests need (the packaging tests also read the changelog and the citation);
+    its command-line and packaging tests pass from the unpacked sdist (the sdist tests themselves are left out, as
+    they would build another sdist)."""
+    with tarfile.open(build_sdist(tmp_path)) as sdist:
+        top = sdist.getnames()[0].split('/')[0]
+        for name in ('tests/conftest.py', 'convert.py', 'tests/test_viewer.mjs', 'CHANGELOG.md', 'CITATION.cff'):
+            assert f'{top}/{name}' in sdist.getnames(), name
+        # The 'data' filter (Python 3.12, backported to later 3.10 and 3.11 releases) refuses unsafe members and
+        # keeps 3.14 from warning; older releases extract as before
+        safe = {'filter': 'data'} if hasattr(tarfile, 'data_filter') else {}
+        sdist.extractall(tmp_path / 'unpacked', **safe)
+    tests = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', '-k', 'not sdist',
+                            '--basetemp', str(tmp_path / 'inner'), 'tests/test_cli.py', 'tests/test_packaging.py'],
+                           cwd=tmp_path / 'unpacked' / top, capture_output=True, text=True)
+    assert tests.returncode == 0, tests.stdout[-3000:]
