@@ -42,6 +42,8 @@ SOURCE_FOLDERS = ['raindrop', 'viewer']
 # ([name]: target) and HTML links (href="target")
 LINK_TARGETS = [re.compile(r'\]\(\s*<?([^)\s>]+)'), re.compile(r'^\s*\[[^\]]+\]:\s*<?([^\s>]+)', re.MULTILINE),
                 re.compile(r'href="([^"]+)"')]
+# A release's heading in CHANGELOG.md (## [0.1.1] - 2026-11-27; not [Unreleased])
+CHANGELOG_RELEASE = re.compile(r'^## \[(\d[^\]]*)\]', re.MULTILINE)
 
 
 def test_converter_is_in_the_package():
@@ -150,3 +152,15 @@ def test_readme_links_work_on_pypi():
     targets = [target for pattern in LINK_TARGETS for target in pattern.findall(readme)]
     assert targets
     assert [target for target in targets if not target.startswith('https://')] == []
+
+
+def test_changelog_names_the_version():
+    """The newest release in CHANGELOG.md is the package's version."""
+    changelog = Path(ROOT, 'CHANGELOG.md').read_text(encoding='utf-8')
+    assert CHANGELOG_RELEASE.findall(changelog)[0] == raindrop.__version__
+
+
+def test_pypi_page_links_the_changelog(tmp_path):
+    with zipfile.ZipFile(build_wheel(tmp_path)) as wheel:
+        metadata = read_metadata(wheel)
+    assert f'Changelog, {REPO_URL}/blob/master/CHANGELOG.md' in metadata.get_all('Project-URL', [])
