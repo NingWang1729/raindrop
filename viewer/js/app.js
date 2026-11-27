@@ -32,7 +32,7 @@ import { Legend } from './legend.js';
 import { cellValueText } from './names.js';
 import { FilterPanels } from './panels.js';
 import { Turning } from './turning.js';
-import { blurOnEnter, el, formatCount, svg } from './ui.js';
+import { blurOnEnter, el, formatCount, reportErrors, svg } from './ui.js';
 import { ViewGrid } from './views.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
@@ -77,6 +77,7 @@ class App {
       categories: this.categories,
       selectedView: () => this.selected,
       setStatus: (message) => this.setStatus(message),
+      clearStatus: (message) => this.clearStatus(message),
       renderLegend: () => this.legend.renderLegend(),
     });
     // The filter panels and the legend show the selected view's filters; changing one refreshes the views
@@ -232,7 +233,7 @@ class App {
 
     const select = document.getElementById('embedding');
     for (const e of this.manifest.embeddings) select.append(el('option', { value: e.name, textContent: `${e.name} (${e.dims}D)` }));
-    select.addEventListener('change', () => this.setEmbedding(this.selected, select.value));
+    select.addEventListener('change', () => reportErrors(() => this.setEmbedding(this.selected, select.value)));
 
     this.turning.buildRotationSliders();
 
@@ -340,7 +341,8 @@ class App {
 
   // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels, a
   // compact legend, the axis widget and the link button), its scene, and what it shows (embedding, colors), filled
-  // in by setEmbedding and setColor
+  // in by setEmbedding and setColor. loads counts the embedding and color requests made for it, so that only the
+  // newest of each kind draws
   createView() {
     const axisLabelsElement = el('div', { className: 'axis-labels' });
     const tileLegend = el('div', { className: 'tile-legend' });
@@ -354,7 +356,10 @@ class App {
     document.getElementById('tiles').append(tile);
     const linkButton = this.grid.buildLinkButton(tile);
 
-    const view = { tile, axisLabelsElement, tileLegend, widgetElement, hoverLabel, linkButton, color: null, linked: true, settings: this.group };
+    const view = {
+      tile, axisLabelsElement, tileLegend, widgetElement, hoverLabel, linkButton, color: null, linked: true, settings: this.group,
+      loads: { embedding: 0, color: 0 },
+    };
     linkButton.addEventListener('click', () => this.grid.toggleLink(view));
     view.scene = new PointCloudView(tile, this.canvas);
     view.widgetAxes = buildAxisWidget(widgetElement);
@@ -419,11 +424,27 @@ class App {
   }
 
   // Show embedding `name` in a view: load its positions (cells without one are left out), frame the camera on
-  // the reference side with every angle 0, and recolor and refresh the view
+  // the reference side with every angle 0, and refresh the view (its colors are per cell and stay). view.entry is
+  // set with the positions, so it always names what is drawn. Only the view's newest embedding request draws
+  // (view.loads.embedding counts them): one that finishes after a later request, or fails after it, is dropped. A
+  // failed newest request puts the embedding menu back on the drawn embedding and rejects (the handlers show the
+  // error, see reportErrors)
   async setEmbedding(view, name) {
+    const load = ++view.loads.embedding;
     const entry = this.manifest.embeddings.find((e) => e.name === name);
+    const message = `Loading ${name}...`;
+    this.setStatus(message);
+    let positions;
+    try {
+      positions = await this.dataset.embedding(name);
+    } catch (error) {
+      if (load !== view.loads.embedding) return;
+      if (view === this.selected && view.entry) document.getElementById('embedding').value = view.entry.name;
+      throw error;
+    }
+    if (load !== view.loads.embedding) return;
+
     view.entry = entry;
-    const positions = await this.dataset.embedding(name);
     view.valid = validMask(positions, entry.dims);
     const xyz = toXYZ(positions, entry.dims, view.valid);
     view.box = bounds(xyz, view.valid);
@@ -445,8 +466,8 @@ class App {
     this.showFace(view, axis, side);
     // The framed point size depends on the embedding's extent and framing
     if (view === this.selected) this.showBoxes();
-    if (view.color) await this.coloring.setColor(view, view.color);
     this.refresh();
+    this.clearStatus(message);
   }
 
   // After any filter, embedding or view change: recompute which cells pass in each view (cells without a
@@ -509,6 +530,12 @@ class App {
 
   setStatus(message) {
     document.getElementById('status').textContent = message;
+  }
+
+  // Clear the status line if it still shows `message`, so a load that finishes does not wipe a newer load's message
+  // or an error
+  clearStatus(message) {
+    if (document.getElementById('status').textContent === message) this.setStatus('');
   }
 }
 

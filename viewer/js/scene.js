@@ -197,6 +197,8 @@ export class PointCloudView {
     // (renderOrder 1): blending over it while translucent, depth-tested against it like any opaque object at 100%
     // (three.js draws opaque objects before transparent ones)
     this.geometry = new THREE.BufferGeometry();
+    // Colors given before the first positions, waiting for setPositions (setColors)
+    this.pendingColors = null;
     this.uniforms = { uScale: { value: 1 } };
     this.shown = this.makePoints(SHOWN_STATE, 1, false);
     this.context = this.makePoints(CONTEXT_STATE, CONTEXT_OPACITY, true);
@@ -287,8 +289,13 @@ export class PointCloudView {
     const n = xyz.length / 3;
     this.geometry.setAttribute('position', new THREE.BufferAttribute(xyz, 3));
     if (!this.geometry.getAttribute('color') || this.geometry.getAttribute('color').count !== n) {
-      // Colors: one byte per channel, normalized to 0..1 in the shader
-      this.geometry.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(n * 3).fill(UNSET_COLOR), 3, true));
+      // Colors: one byte per channel, normalized to 0..1 in the shader; those given before the first positions
+      // (setColors) if any, else grey
+      const rgb = new Uint8Array(n * 3).fill(UNSET_COLOR);
+      // (the same length: every embedding has a position, or NaN, for each of the dataset's cells)
+      if (this.pendingColors?.length === rgb.length) rgb.set(this.pendingColors);
+      this.pendingColors = null;
+      this.geometry.setAttribute('color', new THREE.BufferAttribute(rgb, 3, true));
       this.geometry.setAttribute('state', new THREE.BufferAttribute(new Float32Array(n), 1));
     }
     this.center = center;
@@ -354,9 +361,14 @@ export class PointCloudView {
     return [(ndc.x + 1) / 2 * this.container.clientWidth, (1 - ndc.y) / 2 * this.container.clientHeight];
   }
 
-  // rgb: one byte per channel per cell, n * 3 values
+  // rgb: one byte per channel per cell, n * 3 values. Colors given before the first positions (a color that loads
+  // faster than the view's embedding) are kept until setPositions makes the color attribute
   setColors(rgb) {
     const attribute = this.geometry.getAttribute('color');
+    if (!attribute) {
+      this.pendingColors = rgb;
+      return;
+    }
     attribute.array.set(rgb);
     attribute.needsUpdate = true;
     this.render();
