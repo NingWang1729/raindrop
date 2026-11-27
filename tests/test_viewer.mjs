@@ -329,6 +329,33 @@ const tests = {
     }
   },
 
+  async 'a failed download is not reused: asking again downloads again'() {
+    // The server fails the first request for the file and serves it afterwards (a passing network error)
+    const bytes = Uint16Array.from([3, 1, 2]);
+    let requests = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      requests++;
+      return requests === 1 ? { ok: false, status: 503 } : { ok: true, arrayBuffer: async () => bytes.buffer };
+    };
+    const manifest = {
+      n_cells: 3, embeddings: [], gene_sources: [], fields: [{ name: 'cluster', file: 'obs/cluster.bin', dtype: 'uint16' }],
+    };
+    const dataset = new Dataset(new URL('http://x/data/'), manifest);
+    try {
+      // Two requests during the failing download share it, and its failure
+      const failing = [dataset.fieldValues('cluster'), dataset.fieldValues('cluster')];
+      for (const request of failing) await assert.rejects(request, /\(503\)/);
+      assert.equal(requests, 1);
+      // Asking again downloads again; the values that arrive are then reused
+      assert.deepEqual([...await dataset.fieldValues('cluster')], [3, 1, 2]);
+      await dataset.fieldValues('cluster');
+      assert.equal(requests, 2);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  },
+
   'category codes take their palette color; colors convert to and from hex'() {
     const palette = [[255, 0, 0], [0, 128, 255]];
     assert.deepEqual([...colorCategories(Uint8Array.from([1, 0, 1]), palette)], [0, 128, 255, 255, 0, 0, 0, 128, 255]);

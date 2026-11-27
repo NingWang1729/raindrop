@@ -132,6 +132,11 @@ export class ViewGrid {
     count.value = n;
     while (this.views.length > n) {
       const view = this.views.pop();
+      // The removed view's pending embedding and color become older than its newest request, so they are dropped
+      // (with no error) when they finish; a pending add-filter pick still lands, as it goes into the view's settings,
+      // which other linked views may share (FilterPanels.pickFilter)
+      view.loads.embedding++;
+      view.loads.color++;
       view.scene.dispose();
       view.tile.remove();
       if (view === this.selectedView()) this.select(this.views[0]);

@@ -148,7 +148,9 @@ class App {
     // Panels for convert.py --filters, with the values of --select ticked
     for (const name of manifest.defaults.filters) await this.panels.addFilter(name);
     await this.selectStartValues();
-    // Color by convert.py --color, else the first categorical column
+    // Color by convert.py --color, else the first categorical column, unless a color was picked for the view while the
+    // dataset opened: the user's pick wins, even if it is still loading or failed (picking it again retries)
+    if (view.loads.color > 0) return;
     const firstCategory = manifest.fields.find((f) => f.kind === 'category');
     await this.coloring.setColor(view, { kind: 'field', name: manifest.defaults.color ?? firstCategory?.name });
   }
@@ -341,8 +343,8 @@ class App {
 
   // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels, a
   // compact legend, the axis widget and the link button), its scene, and what it shows (embedding, colors), filled
-  // in by setEmbedding and setColor. loads counts the embedding and color requests made for it, so that only the
-  // newest of each kind draws
+  // in by setEmbedding and setColor. loads counts the embedding, color and add-filter menu requests made for it, so
+  // that only the newest of each kind draws (or adds)
   createView() {
     const axisLabelsElement = el('div', { className: 'axis-labels' });
     const tileLegend = el('div', { className: 'tile-legend' });
@@ -358,7 +360,7 @@ class App {
 
     const view = {
       tile, axisLabelsElement, tileLegend, widgetElement, hoverLabel, linkButton, color: null, linked: true, settings: this.group,
-      loads: { embedding: 0, color: 0 },
+      loads: { embedding: 0, color: 0, filter: 0 },
     };
     linkButton.addEventListener('click', () => this.grid.toggleLink(view));
     view.scene = new PointCloudView(tile, this.canvas);
@@ -426,9 +428,9 @@ class App {
   // Show embedding `name` in a view: load its positions (cells without one are left out), frame the camera on
   // the reference side with every angle 0, and refresh the view (its colors are per cell and stay). view.entry is
   // set with the positions, so it always names what is drawn. Only the view's newest embedding request draws
-  // (view.loads.embedding counts them): one that finishes after a later request, or fails after it, is dropped. A
-  // failed newest request puts the embedding menu back on the drawn embedding and rejects (the handlers show the
-  // error, see reportErrors)
+  // (view.loads.embedding counts them): one that finishes after a later request, or fails after it, or after its view
+  // was removed, is dropped, clearing its own status message if no other has replaced it. A failed newest request
+  // puts the embedding menu back on the drawn embedding and rejects (the handlers show the error, see reportErrors)
   async setEmbedding(view, name) {
     const load = ++view.loads.embedding;
     const entry = this.manifest.embeddings.find((e) => e.name === name);
@@ -438,11 +440,17 @@ class App {
     try {
       positions = await this.dataset.embedding(name);
     } catch (error) {
-      if (load !== view.loads.embedding) return;
+      if (load !== view.loads.embedding) {
+        this.clearStatus(message);
+        return;
+      }
       if (view === this.selected && view.entry) document.getElementById('embedding').value = view.entry.name;
       throw error;
     }
-    if (load !== view.loads.embedding) return;
+    if (load !== view.loads.embedding) {
+      this.clearStatus(message);
+      return;
+    }
 
     view.entry = entry;
     view.valid = validMask(positions, entry.dims);
