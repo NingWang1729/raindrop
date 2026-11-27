@@ -316,6 +316,18 @@ const tests = {
     assert.deepEqual(parseHex(toHex([7, 200, 99])), [7, 200, 99]);
   },
 
+  'code 255 of a uint8 category field is an ordinary category, not a missing value'() {
+    // 256 categories: the last, code 255, has its own color, count and filter tick
+    const codes = Uint8Array.from([0, 255, 255]);
+    const palette = Array.from({ length: 256 }, (_, i) => [i, 0, 0]);
+    assert.deepEqual([...colorCategories(codes, palette)], [0, 0, 0, 255, 0, 0, 255, 0, 0]);
+    const counts = filters.countCategories(codes, 256, Uint8Array.from([1, 1, 1]));
+    assert.deepEqual([counts[0], counts[255]], [1, 2]);
+    const field = { kind: 'category', values: codes, allowed: null };
+    filters.setCategories(field, 256, [255], true);
+    assert.deepEqual([...filters.computeKeep(Uint8Array.from([1, 1, 1]), [field])], [0, 1, 1]);
+  },
+
   'generated colors are distinct, valid RGB'() {
     const colors = Array.from({ length: 50 }, (_, i) => generatedColor(i).join(','));
     assert.equal(new Set(colors).size, 50);

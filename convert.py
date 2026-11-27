@@ -35,6 +35,10 @@ COLOR_SUFFIX = '_color'
 # Largest values the category code and count dtypes hold
 UINT8_MAX = np.iinfo(np.uint8).max
 UINT16_MAX = np.iinfo(np.uint16).max
+# Most categories a column's codes can hold. Codes run from 0 to n - 1 and none is reserved (missing values are the
+# 'NA' category), so a type whose largest value is M holds M + 1 categories
+UINT8_CATEGORIES = UINT8_MAX + 1
+MAX_CATEGORIES = UINT16_MAX + 1
 
 # One-byte gene values: codes 0 to ONE_BYTE_TOP in steps of each gene's top value / ONE_BYTE_TOP; the one code
 # left (255) marks a missing value
@@ -309,6 +313,17 @@ def check_start_style(start_style):
             raise ValueError(f'--start-style {key} {value} is outside {low} to {high}')
 
 
+def check_category_counts(obs, columns):
+    """Raise if an exported categorical column has more categories (counting 'NA') than its codes can hold."""
+    for column in columns:
+        if is_numeric(obs[column]):
+            continue
+        _, categories = category_codes(obs[column])
+        if len(categories) > MAX_CATEGORIES:
+            raise ValueError(f'obs column {column} has {len(categories)} categories; at most {MAX_CATEGORIES} are '
+                             f'supported; leave it out with --exclude {column}')
+
+
 def check_out_dir(out_dir):
     """Raise if the output folder exists: a dataset folder is never overwritten."""
     if os.path.exists(out_dir):
@@ -347,12 +362,10 @@ def category_codes(values):
     return codes, categories
 
 
-def code_dtype(n_categories, column):
-    """Unsigned integer type of the category codes: uint8 for at most UINT8_MAX categories, uint16 for at most
-    UINT16_MAX, else an error. (Each limit is one below what the type could hold.)"""
-    if n_categories > UINT16_MAX:
-        raise ValueError(f'obs column {column} has {n_categories} categories; at most {UINT16_MAX} are supported')
-    return 'uint8' if n_categories <= UINT8_MAX else 'uint16'
+def code_dtype(n_categories):
+    """Unsigned integer type of the category codes: uint8 for at most UINT8_CATEGORIES categories, else uint16
+    (check_category_counts has made sure they fit)."""
+    return 'uint8' if n_categories <= UINT8_CATEGORIES else 'uint16'
 
 
 def is_numeric(values):
@@ -416,7 +429,7 @@ def write_fields(adata, columns, out_dir):
         else:
             codes, categories = category_codes(values)
             colors = category_colors(adata.obs, adata.uns, column, categories)
-            entry.update(kind='category', dtype=code_dtype(len(categories), column), categories=categories,
+            entry.update(kind='category', dtype=code_dtype(len(categories)), categories=categories,
                          colors=colors)
             write_array(f"{out_dir}/{entry['file']}", codes, entry['dtype'])
         entries.append(entry)
@@ -672,6 +685,7 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
     columns = exported_columns(adata.obs, exclude)
     embeddings = embedding_keys(adata)
     check_columns(columns, color, filters)
+    check_category_counts(adata.obs, columns)
     check_embeddings(embeddings, embedding, up)
     check_ends(embeddings, ends, up)
     check_roles(embeddings, roles, up, ends, axis_labels)
