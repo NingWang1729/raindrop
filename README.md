@@ -1,5 +1,7 @@
 # Raindrop
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24604862.svg)](https://doi.org/10.5281/zenodo.24604862)
+
 A browser viewer for single-cell and spatial transcriptomics data, in the spirit of
 [cirro](https://github.com/lilab-bcb/cirrocumulus): every cell is a drop in a 3D point cloud.
 It follows the integration method [PIANO](https://github.com/NingWang1729/piano), and is named

@@ -50,6 +50,11 @@ LINK_TARGETS = [re.compile(r'\]\(\s*<?([^)\s>]+)'), re.compile(r'^\s*\[[^\]]+\]:
 CHANGELOG_RELEASE = re.compile(r'^## \[(\d[^\]]*)\]', re.MULTILINE)
 # The version line of CITATION.cff
 CITATION_VERSION = re.compile(r'^version: (\S+)$', re.MULTILINE)
+# The top-level doi line of CITATION.cff, and the values in its identifiers list (indented)
+CITATION_DOI = re.compile(r'^doi: (\S+)$', re.MULTILINE)
+CITATION_IDENTIFIER = re.compile(r'^ +value: (\S+)$', re.MULTILINE)
+# A Zenodo DOI (10.5281 is Zenodo's DOI prefix, then zenodo.<record number>)
+ZENODO_DOI = re.compile(r'10\.5281/zenodo\.\d+')
 
 
 def test_converter_is_in_the_package():
@@ -192,6 +197,26 @@ def test_citation_names_the_version():
     """The version in CITATION.cff is the package's version."""
     citation = Path(ROOT, 'CITATION.cff').read_text(encoding='utf-8')
     assert CITATION_VERSION.findall(citation) == [raindrop.__version__]
+
+
+def test_citation_gives_the_zenodo_doi():
+    """CITATION.cff cites one Zenodo DOI, which its identifiers list too, and every identifier is a Zenodo DOI."""
+    citation = Path(ROOT, 'CITATION.cff').read_text(encoding='utf-8')
+    dois = CITATION_DOI.findall(citation)
+    assert len(dois) == 1
+    assert ZENODO_DOI.fullmatch(dois[0])
+    identifiers = CITATION_IDENTIFIER.findall(citation)
+    assert dois[0] in identifiers
+    assert all(ZENODO_DOI.fullmatch(identifier) for identifier in identifiers)
+
+
+def test_readme_badge_links_the_citation_doi():
+    """The README's DOI badge shows and links the doi of CITATION.cff."""
+    citation = Path(ROOT, 'CITATION.cff').read_text(encoding='utf-8')
+    readme = Path(ROOT, 'README.md').read_text(encoding='utf-8')
+    dois = CITATION_DOI.findall(citation)
+    assert dois
+    assert f'[![DOI](https://zenodo.org/badge/DOI/{dois[0]}.svg)](https://doi.org/{dois[0]})' in readme
 
 
 def test_sdist_runs_its_own_tests(tmp_path):
