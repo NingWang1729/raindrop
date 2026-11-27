@@ -12,7 +12,16 @@ host can serve it, and any page can embed it.
 
 ## Quick start
 
-Install Raindrop (Python 3.10 or later) from GitHub:
+Install Raindrop (Python 3.10 or later) from PyPI, where it is called `raindrop-viewer`; the command it installs is
+`raindrop`. If you installed Raindrop 0.1.0 (from GitHub or a clone), uninstall it first with
+`python -m pip uninstall raindrop`: it was called `raindrop` then, and both install the `raindrop` command and Python
+package.
+
+```bash
+python -m pip install raindrop-viewer
+```
+
+or the latest version from GitHub:
 
 ```bash
 python -m pip install git+https://github.com/NingWang1729/raindrop.git
@@ -35,7 +44,8 @@ raindrop view my.h5ad
 The file needs at least one 2D or 3D `obsm` entry to plot (e.g. `spatial` or `X_umap`); genes come from `X`.
 `raindrop view` converts the file into a dataset folder, serves the viewer and that folder on this computer, and opens
 the browser at the viewer; Ctrl-C stops it. It takes every converter option (see
-[Converter options](#converter-options)), e.g. `raindrop view my.h5ad --color cell_type --filters region`.
+[Converter options](https://github.com/NingWang1729/raindrop#converter-options)), e.g.
+`raindrop view my.h5ad --color cell_type --filters region`.
 
 ### How `raindrop view` works
 
@@ -103,7 +113,8 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
   rotation sets every angle to 0 (Reset view for 2D embeddings). Show axes toggles the axes box and labels.
 - **Color by** any obs column from the color menu, or by a gene: type its name in the gene box (with suggestions)
   and press Enter. Datasets with several gene sources have a menu to pick the source. Categories get colors from
-  the data (see [Colors](#colors)) or generated ones; numbers and genes get a color bar.
+  the data (see [Colors](https://github.com/NingWang1729/raindrop#colors)) or generated ones; numbers and genes get a
+  color bar.
 - **Filters.** Add a filter panel per obs column from the "+ Add filter..." menu: tick values of a categorical
   column (a search box narrows long lists; drag over rows to tick several), or type a minimum and maximum for a
   numeric one. Filters combine: a cell is shown when it passes all of them. Each panel has **reverse** (show the cells
@@ -111,7 +122,8 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
   cell count. The count at the top says how many cells are shown.
 - **Legend.** The panel to the right of the plots lists the colored column's values with their cell counts. Ticking
   its rows sets the filter on that column, with the same reverse and clear buttons. Grouped columns (see
-  [Groups](#groups)) show as a tree in both the filter panel and the legend.
+  [Groups](https://github.com/NingWang1729/raindrop#groups)) show as a tree in both the filter panel and the
+  legend.
 - **Shown and filtered-out cells.** The point size and opacity table sets both for the cells that pass the filters
   (Shown) and for the rest (Filtered out), each with a slider and a number box; "Filtered-out cells keep their colors"
   draws filtered-out cells in their colors rather than grey.
@@ -125,16 +137,17 @@ then open the same address, <http://localhost:8000/viewer/?data=../data/my_datas
 ## Converter options
 
 `raindrop convert my.h5ad data/my_dataset [options]` is the same as `python convert.py my.h5ad data/my_dataset
-[options]`, and `raindrop view my.h5ad [options]` takes the same options.
+[options]` in a clone, and `raindrop view my.h5ad [options]` takes the same options.
 
-`python convert.py --help` lists every option. The converter exports every `obs` column (numbers as ranges,
+`raindrop convert --help` lists every option. The converter exports every `obs` column (numbers as ranges,
 everything else as categories, at most 65536 per column, counting the 'NA' category for missing values;
-`<column>_color` columns only give colors, see [Colors](#colors)), every 2D or 3D `obsm` entry, and every gene in
-`X` (stored as two-byte whole counts if all values are whole numbers up to 65535, else as four-byte floats).
+`<column>_color` columns only give colors, see [Colors](https://github.com/NingWang1729/raindrop#colors)), every 2D or
+3D `obsm` entry, and every gene in `X` (stored as two-byte whole counts if all values are whole numbers up to 65535,
+else as four-byte floats).
 An example with several options:
 
 ```bash
-python convert.py my.h5ad data/my_dataset --name "My dataset" \
+raindrop convert my.h5ad data/my_dataset --name "My dataset" \
     --color cell_type --filters cell_type region --select region A B \
     --axis-labels AP DV LR --ends spatial anterior posterior dorsal ventral left right --view left
 ```
@@ -215,18 +228,18 @@ Category colors come from scanpy-style `uns['<column>_colors']` (one color per c
 `obs['<column>_color']` column that gives every cell of a category the same color (empty cells, None or NaN, are
 ignored). Categories without colors get generated ones.
 
-The dataset folder's layout is described at the top of `raindrop/convert.py` and in `python convert.py --help`.
+The dataset folder's layout is described at the top of `raindrop/convert.py` and in `raindrop convert --help`.
 
 ## Hosting and embedding
 
 Raindrop consists only of static files, so any static web host can serve it (a lab web server, GitHub Pages, cloud
-storage serving a website, ...). Put `viewer/` and the dataset folders on the host, and open
-`viewer/?data=<dataset folder>`. The dataset folder must be served alongside the viewer, or be reachable from it:
-`?data=` is a URL resolved relative to the viewer page (`viewer/`), so `../data/my_dataset/` is the folder
+storage serving a website, ...). Put `viewer/` (from a clone of this repository) and the dataset folders on the host,
+and open `viewer/?data=<dataset folder>`. The dataset folder must be served alongside the viewer, or be reachable from
+it: `?data=` is a URL resolved relative to the viewer page (`viewer/`), so `../data/my_dataset/` is the folder
 `data/my_dataset` beside `viewer/`. An absolute URL works too; a dataset on another host must allow cross-origin
-requests (CORS), since the viewer downloads its files with JavaScript. The repository's `data/` folder is ignored
-by git, so converted datasets there are not committed. A dataset's `manifest.json` records the source of the
-`.h5ad` file it was converted from.
+requests (CORS), since the viewer downloads its files with JavaScript. The repository's `data/` folder is ignored by
+git, so converted datasets there are not committed. A dataset's `manifest.json` records the source of the `.h5ad` file
+it was converted from.
 
 ### URL parameters
 
@@ -248,7 +261,7 @@ full screen in the frame, the Full screen button is left out.
 
 ## Development
 
-Install the test dependencies and run the unit tests:
+In a clone of this repository, install the test dependencies and run the unit tests:
 
 ```bash
 uv venv .venv && uv pip install --python .venv/bin/python -e '.[test]'
@@ -265,11 +278,12 @@ dependency.
 ## License
 
 Raindrop is free software, licensed under the GNU Lesser General Public License, version 3 or (at your option) any
-later version (LGPL-3.0-or-later). The LGPL builds on the GNU General Public License, version 3; [LICENSE](LICENSE)
-holds both texts.
+later version (LGPL-3.0-or-later). The LGPL builds on the GNU General Public License, version 3;
+[LICENSE](https://github.com/NingWang1729/raindrop/blob/master/LICENSE) holds both texts.
 
 ## Third-party code
 
 `viewer/vendor/` holds three.js r160 (`three.module.min.js`) and its TrackballControls (`TrackballControls.js`, from
 the three.js repository's `examples/jsm/controls/`), both unmodified. three.js is Copyright © 2010-2023 three.js
-authors, under the MIT License; the full notice is in `viewer/vendor/THREE_LICENSE`.
+authors, under the MIT License; the full notice is in
+[`viewer/vendor/THREE_LICENSE`](https://github.com/NingWang1729/raindrop/blob/master/viewer/vendor/THREE_LICENSE).
