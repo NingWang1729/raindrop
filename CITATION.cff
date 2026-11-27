@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use Raindrop, please cite it as below."
+type: software
+title: Raindrop
+abstract: "A browser viewer for single-cell and spatial transcriptomics data that needs no server program: a converter turns an .h5ad file into static files, and the viewer downloads only what it needs."
+authors:
+  - family-names: Wang
+    given-names: Ning
+    orcid: "https://orcid.org/0000-0003-3073-7911"
+license: LGPL-3.0-or-later
+repository-code: "https://github.com/NingWang1729/raindrop"
+version: 0.1.1
+date-released: "2026-11-27"
+keywords:
+  - single-cell
+  - spatial transcriptomics
+  - visualization
+  - point cloud
+  - anndata
+  - web viewer

@@ -11,8 +11,9 @@ dynamic = ["version"]
 description = "Raindrop, a browser viewer for single-cell and spatial data, with its converter"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "LGPL-3.0-or-later"
-license-files = ["LICENSE"]
+# Raindrop is LGPL; the three.js files it ships in viewer/vendor/ are MIT, with their notice in THREE_LICENSE
+license = "LGPL-3.0-or-later AND MIT"
+license-files = ["LICENSE", "viewer/vendor/THREE_LICENSE"]
 authors = [{name = "Ning Wang"}]
 dependencies = ["anndata>=0.10", "numpy", "pandas", "platformdirs", "scipy"]
 keywords = ["single-cell", "spatial transcriptomics", "anndata", "h5ad", "visualization", "point cloud", "viewer",
@@ -37,6 +38,7 @@ classifiers = [
 Homepage = "https://github.com/NingWang1729/raindrop"
 Repository = "https://github.com/NingWang1729/raindrop"
 Issues = "https://github.com/NingWang1729/raindrop/issues"
+Changelog = "https://github.com/NingWang1729/raindrop/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 # The packaging tests build a wheel with setuptools
