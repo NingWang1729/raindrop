@@ -319,18 +319,20 @@ def category_colors(obs, uns, column, categories):
     """One color per category, None where the data has none.
 
     Uses scanpy-style uns['<column>_colors'] first (when it has one color per category), then a per-cell
-    obs['<column>_color'] column, which must give the same color to every cell of a category (an empty color cell
-    becomes the text 'None' or 'nan').
+    obs['<column>_color'] column, which must give the same color to every cell of a category. Empty color cells
+    (None, NaN) are ignored: a category whose color cells are all empty gets None.
     """
     if f'{column}_colors' in uns and len(uns[f'{column}_colors']) == len(categories):
         return [str(c) for c in uns[f'{column}_colors']]
     if f'{column}{COLOR_SUFFIX}' not in obs:
         return [None] * len(categories)
-    per_category = obs.groupby(column, observed=True)[f'{column}{COLOR_SUFFIX}'].agg(lambda c: set(c.astype(str)))
+    # Drop cells without a color first, so that str() never turns a missing color into the text 'None' or 'nan'
+    colored = obs[[column, f'{column}{COLOR_SUFFIX}']].dropna()
+    per_category = colored.groupby(column, observed=True)[f'{column}{COLOR_SUFFIX}'].agg(lambda c: set(c.astype(str)))
     if (per_category.map(len) > 1).any():
         warnings.warn(f'{column}{COLOR_SUFFIX} has several colors for one category; the viewer will generate colors')
         return [None] * len(categories)
-    # Categories without cells get no color; the viewer generates one
+    # Categories without colored cells get no color; the viewer generates one
     return [next(iter(per_category[c])) if c in per_category.index else None for c in categories]
 
 
