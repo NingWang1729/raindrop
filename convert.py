@@ -702,7 +702,9 @@ def convert(h5ad_path, out_dir, *, name=None, color=None, filters=(), embedding=
     manifest = {
         'format_version': FORMAT_VERSION,
         'name': name,
-        'source': os.path.abspath(h5ad_path),
+        # Only the input's file name: the folder may be published, and the input's directories belong to the converting
+        # machine
+        'source': os.path.basename(h5ad_path),
         'n_cells': int(adata.n_obs),
         'axes': {'labels': list(axis_labels)},
         'defaults': {'embedding': embedding or default_embedding(embeddings), 'color': color,

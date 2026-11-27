@@ -92,6 +92,22 @@ def test_manifest_and_arrays(tmp_path):
         np.testing.assert_array_equal(gene, adata.X[:, i].toarray().ravel())
 
 
+@pytest.mark.parametrize('relative', [False, True])
+def test_source_is_the_file_name_only(tmp_path, monkeypatch, relative):
+    # The manifest is published with the dataset, so it must not reveal the converting machine's directories
+    adata, _ = make_adata()
+    (tmp_path / 'inputs').mkdir()
+    adata.write_h5ad(tmp_path / 'inputs' / 'my.h5ad')
+    monkeypatch.chdir(tmp_path)
+    path = 'inputs/my.h5ad' if relative else str(tmp_path / 'inputs' / 'my.h5ad')
+    manifest = convert(path, str(tmp_path / 'out'))
+    assert manifest['source'] == 'my.h5ad'
+
+    # No directory of the input appears anywhere in the written manifest
+    text = (tmp_path / 'out' / 'manifest.json').read_text()
+    assert str(tmp_path) not in text and 'inputs/' not in text
+
+
 def test_float_genes_and_large_counts(tmp_path):
     adata, X = make_adata()
 
