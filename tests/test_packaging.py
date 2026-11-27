@@ -210,6 +210,15 @@ def test_citation_gives_the_zenodo_doi():
     assert all(ZENODO_DOI.fullmatch(identifier) for identifier in identifiers)
 
 
+def test_readme_badge_links_the_citation_doi():
+    """The README's DOI badge shows and links the doi of CITATION.cff."""
+    citation = Path(ROOT, 'CITATION.cff').read_text(encoding='utf-8')
+    readme = Path(ROOT, 'README.md').read_text(encoding='utf-8')
+    dois = CITATION_DOI.findall(citation)
+    assert dois
+    assert f'[![DOI](https://zenodo.org/badge/DOI/{dois[0]}.svg)](https://doi.org/{dois[0]})' in readme
+
+
 def test_sdist_runs_its_own_tests(tmp_path):
     """The sdist carries every file its tests need (the packaging tests also read the changelog and the citation);
     its command-line and packaging tests pass from the unpacked sdist (the sdist tests themselves are left out, as
